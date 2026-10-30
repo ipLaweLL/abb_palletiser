@@ -92,6 +92,7 @@ class BeamSearchPlanner:
         while beam:
 
             next_states: List[BeamState] = []
+            complete_states: List[BeamState] = []
 
             for state in beam:
 
@@ -103,14 +104,15 @@ class BeamSearchPlanner:
                         state.unplaced_count()
                         == best.unplaced_count()
                         and
-                        self._score(state)
-                        < self._score(best)
+                        self._partial_score(state)
+                        < self._partial_score(best)
                     )
                 ):
                     best = state
 
                 if state.unplaced_count() == 0:
-                    return state
+                    complete_states.append(state)
+                    continue
 
                 candidates = (
                     self.stack_generator.generate(
@@ -154,6 +156,12 @@ class BeamSearchPlanner:
                             )
                         )
 
+            if complete_states:
+                return min(
+                    complete_states,
+                    key=self._score,
+                )
+
             if not next_states:
                 break
 
@@ -182,19 +190,165 @@ class BeamSearchPlanner:
             if (
                 current is None
                 or
-                self._score(state)
-                < self._score(current)
+                self._partial_score(state)
+                < self._partial_score(current)
             ):
                 unique[key] = state
 
-        ordered = sorted(
-            unique.values(),
-            key=self._score,
+        by_remaining: Dict[
+            Tuple,
+            List[BeamState],
+        ] = {}
+
+        for state in unique.values():
+
+            remaining_key = tuple(
+                sorted(
+                    state.remaining.items()
+                )
+            )
+
+            by_remaining.setdefault(
+                remaining_key,
+                [],
+            ).append(state)
+
+        diversified: List[BeamState] = []
+
+        per_signature = max(
+            2,
+            min(
+                6,
+                self.beam_width // 10,
+            ),
         )
 
-        return ordered[
-            :self.beam_width
-        ]
+        for group in by_remaining.values():
+
+            group.sort(
+                key=self._partial_score,
+            )
+
+            diversified.extend(
+                group[:per_signature]
+            )
+
+        diversified.sort(
+            key=self._partial_score,
+        )
+
+        if len(diversified) >= self.beam_width:
+            return diversified[
+                :self.beam_width
+            ]
+
+        selected_keys = {
+            self._state_key(state)
+            for state in diversified
+        }
+
+        remainder = sorted(
+            (
+                state
+                for state in unique.values()
+                if self._state_key(state)
+                not in selected_keys
+            ),
+            key=self._partial_score,
+        )
+
+        diversified.extend(
+            remainder[
+                :(
+                    self.beam_width
+                    - len(diversified)
+                )
+            ]
+        )
+
+        return diversified
+
+    def _partial_score(
+        self,
+        state: BeamState,
+    ) -> Tuple:
+        """
+        Score incomplete layouts for future packability.
+
+        Keep them compact and contiguous so later items still have
+        large usable free regions. Final visual quality is evaluated
+        only after a complete layout exists.
+        """
+
+        if not state.placed:
+            return (
+                state.unplaced_count(),
+                0.0,
+                0.0,
+                0,
+            )
+
+        min_x = min(
+            stack.x
+            for stack in state.placed
+        )
+        min_y = min(
+            stack.y
+            for stack in state.placed
+        )
+        max_x = max(
+            stack.right
+            for stack in state.placed
+        )
+        max_y = max(
+            stack.top
+            for stack in state.placed
+        )
+
+        span_x = max_x - min_x
+        span_y = max_y - min_y
+
+        bounding_area = (
+            span_x
+            * span_y
+        )
+
+        used_area = sum(
+            stack.length
+            * stack.width
+            for stack in state.placed
+        )
+
+        wasted_ratio = (
+            max(
+                0.0,
+                bounding_area
+                - used_area,
+            )
+            / bounding_area
+            if bounding_area > 0
+            else 0.0
+        )
+
+        footprint_ratio = (
+            bounding_area
+            / (
+                self.pallet_length
+                * self.pallet_width
+            )
+            if (
+                self.pallet_length > 0
+                and self.pallet_width > 0
+            )
+            else 0.0
+        )
+
+        return (
+            state.unplaced_count(),
+            footprint_ratio,
+            wasted_ratio,
+            len(state.placed),
+        )
 
     def _score(
         self,
