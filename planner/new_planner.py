@@ -2,7 +2,7 @@ from math import floor
 from typing import Dict, List
 
 from config.products import PRODUCTS
-from planner.beam_search import BeamSearchPlanner
+from planner.ordered_sweep import OrderedSweepPlanner
 from planner.models import PalletSlot, PlannerResult
 
 
@@ -101,11 +101,10 @@ class NewPalletPlanner:
                     ),
                 )
 
-        planner = BeamSearchPlanner(
+        planner = OrderedSweepPlanner(
             pallet_length=effective_length,
             pallet_width=effective_width,
             max_height=max_height,
-            beam_width=beam_width,
             gap_x=gap_x,
             gap_y=gap_y,
             edge_margin_x=edge_margin_x,
@@ -115,33 +114,6 @@ class NewPalletPlanner:
         state = planner.search(
             quantities=quantities,
         )
-
-        if (
-            state.unplaced_count() != 0
-            and beam_width < 120
-        ):
-            retry_planner = BeamSearchPlanner(
-                pallet_length=effective_length,
-                pallet_width=effective_width,
-                max_height=max_height,
-                beam_width=120,
-                gap_x=gap_x,
-                gap_y=gap_y,
-                edge_margin_x=edge_margin_x,
-                edge_margin_y=edge_margin_y,
-            )
-
-            retry_state = retry_planner.search(
-                quantities=quantities,
-            )
-
-            if (
-                retry_state.unplaced_count()
-                < state.unplaced_count()
-                or
-                retry_state.unplaced_count() == 0
-            ):
-                state = retry_state
 
         if state.unplaced_count() != 0:
             remaining = {
