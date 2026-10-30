@@ -35,7 +35,7 @@ from planner.models import (
 from planner.rules import can_stack
 from robot.abb_client import ABBClient
 
-from planner.planner import PalletPlanner
+from planner.new_planner import NewPalletPlanner
 from ui.pallet_view import Pallet3DView
 from execution.pallet_executor import PalletExecutor
 
@@ -61,7 +61,7 @@ class MainWindow(QMainWindow):
             950
         )
 
-        self.planner = PalletPlanner()
+        self.planner = NewPalletPlanner()
 
         self.abb = ABBClient()
 
@@ -793,12 +793,15 @@ class MainWindow(QMainWindow):
             max_height=self.height_input.value(),
             max_weight=self.weight_input.value(),
             overhang=self.overhang_input.value(),
+            gap_x=self.gap_x_input.value(),
+            gap_y=self.gap_y_input.value(),
+            edge_margin_x=self.edge_margin_input.value(),
+            edge_margin_y=self.edge_margin_input.value(),
         )
 
         if not result.success:
 
             self.slots = []
-            self.current_place_index = 0
 
             self.simulate_button.setEnabled(False)
 
