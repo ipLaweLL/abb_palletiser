@@ -4,6 +4,7 @@ from typing import Dict, List, Tuple
 from config.products import PRODUCTS
 from planner.extreme_points import ExtremePointPlacer, PlacedStack
 from planner.stack_generator import StackGenerator
+from planner.scoring import LayoutScorer
 
 
 @dataclass
@@ -46,6 +47,12 @@ class BeamSearchPlanner:
         self.placer = ExtremePointPlacer(
             pallet_length=pallet_length,
             pallet_width=pallet_width,
+        )
+
+        self.scorer = LayoutScorer(
+            pallet_length=pallet_length,
+            pallet_width=pallet_width,
+            max_height=max_height,
         )
 
     def search(
@@ -178,77 +185,11 @@ class BeamSearchPlanner:
         state: BeamState,
     ) -> Tuple:
 
-        unplaced = (
-            state.unplaced_count()
-        )
-
-        floor_positions = (
-            state.floor_positions()
-        )
-
-        if not state.placed:
-
-            return (
-                unplaced,
-                floor_positions,
-                0.0,
-                0.0,
-                0.0,
-            )
-
-        max_x = max(
-            stack.right
-            for stack in state.placed
-        )
-
-        max_y = max(
-            stack.top
-            for stack in state.placed
-        )
-
-        bounding_area = (
-            max_x * max_y
-        )
-
-        used_area = sum(
-            stack.length
-            * stack.width
-            for stack in state.placed
-        )
-
-        wasted_area = (
-            bounding_area
-            - used_area
-        )
-
-        cog_x, cog_y = (
-            self._center_of_mass_xy(
-                state.placed
-            )
-        )
-
-        target_x = (
-            self.pallet_length
-            / 2.0
-        )
-
-        target_y = (
-            self.pallet_width
-            / 2.0
-        )
-
-        cog_distance_sq = (
-            (cog_x - target_x) ** 2
-            +
-            (cog_y - target_y) ** 2
-        )
-
-        return (
-            unplaced,
-            floor_positions,
-            bounding_area,
-            wasted_area,
-            cog_distance_sq,
+        return self.scorer.score(
+            placed=state.placed,
+            unplaced_count=(
+                state.unplaced_count()
+            ),
         )
 
     @staticmethod
