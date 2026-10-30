@@ -44,12 +44,33 @@ class ExtremePointPlacer:
         self,
         pallet_length: float,
         pallet_width: float,
+        gap_x: float = 20.0,
+        gap_y: float = 20.0,
+        edge_margin_x: float = 20.0,
+        edge_margin_y: float = 20.0,
     ) -> None:
         self.pallet_length = pallet_length
         self.pallet_width = pallet_width
 
+        self.gap_x = max(0.0, gap_x)
+        self.gap_y = max(0.0, gap_y)
+
+        self.edge_margin_x = max(
+            0.0,
+            edge_margin_x,
+        )
+        self.edge_margin_y = max(
+            0.0,
+            edge_margin_y,
+        )
+
     def initial_points(self) -> List[ExtremePoint]:
-        return [ExtremePoint(0.0, 0.0)]
+        return [
+            ExtremePoint(
+                self.edge_margin_x,
+                self.edge_margin_y,
+            )
+        ]
 
     def orientations(
         self,
@@ -85,23 +106,33 @@ class ExtremePointPlacer:
         placed: List[PlacedStack],
     ) -> bool:
 
-        if point.x < 0 or point.y < 0:
+        if (
+            point.x < self.edge_margin_x
+            or
+            point.y < self.edge_margin_y
+        ):
             return False
 
         if (
             point.x + length
-            > self.pallet_length
+            > (
+                self.pallet_length
+                - self.edge_margin_x
+            )
         ):
             return False
 
         if (
             point.y + width
-            > self.pallet_width
+            > (
+                self.pallet_width
+                - self.edge_margin_y
+            )
         ):
             return False
 
         for other in placed:
-            if self._overlaps(
+            if self._violates_gap(
                 point.x,
                 point.y,
                 length,
@@ -136,20 +167,25 @@ class ExtremePointPlacer:
     ) -> List[ExtremePoint]:
 
         points = {
-            ExtremePoint(0.0, 0.0)
+            ExtremePoint(
+                self.edge_margin_x,
+                self.edge_margin_y,
+            )
         }
 
         for stack in placed:
             points.add(
                 ExtremePoint(
-                    stack.right,
+                    stack.right
+                    + self.gap_x,
                     stack.y,
                 )
             )
             points.add(
                 ExtremePoint(
                     stack.x,
-                    stack.top,
+                    stack.top
+                    + self.gap_y,
                 )
             )
 
@@ -158,9 +194,17 @@ class ExtremePointPlacer:
         for point in points:
 
             if (
-                point.x > self.pallet_length
+                point.x
+                > (
+                    self.pallet_length
+                    - self.edge_margin_x
+                )
                 or
-                point.y > self.pallet_width
+                point.y
+                > (
+                    self.pallet_width
+                    - self.edge_margin_y
+                )
             ):
                 continue
 
@@ -220,8 +264,8 @@ class ExtremePointPlacer:
 
         return results
 
-    @staticmethod
-    def _overlaps(
+    def _violates_gap(
+        self,
         x: float,
         y: float,
         length: float,
@@ -232,17 +276,21 @@ class ExtremePointPlacer:
         right = x + length
         top = y + width
 
-        separated = (
-            right <= other.x
+        separated_with_gap = (
+            right + self.gap_x
+            <= other.x
             or
-            x >= other.right
+            x
+            >= other.right + self.gap_x
             or
-            top <= other.y
+            top + self.gap_y
+            <= other.y
             or
-            y >= other.top
+            y
+            >= other.top + self.gap_y
         )
 
-        return not separated
+        return not separated_with_gap
 
     @staticmethod
     def _point_blocked_by_any_stack(
@@ -283,6 +331,10 @@ if __name__ == "__main__":
     placer = ExtremePointPlacer(
         pallet_length=1200,
         pallet_width=1000,
+        gap_x=20,
+        gap_y=20,
+        edge_margin_x=20,
+        edge_margin_y=20,
     )
 
     placed: List[PlacedStack] = []
