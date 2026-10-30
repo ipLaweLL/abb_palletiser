@@ -40,6 +40,7 @@ class BeamSearchPlanner:
         gap_y: float = 20.0,
         edge_margin_x: float = 20.0,
         edge_margin_y: float = 20.0,
+        max_slenderness: float = 3.0,
     ) -> None:
 
         self.pallet_length = pallet_length
@@ -51,6 +52,7 @@ class BeamSearchPlanner:
         self.gap_y = gap_y
         self.edge_margin_x = edge_margin_x
         self.edge_margin_y = edge_margin_y
+        self.max_slenderness = max_slenderness
 
         self.stack_generator = StackGenerator()
         self.placer = ExtremePointPlacer(
@@ -114,6 +116,7 @@ class BeamSearchPlanner:
                     self.stack_generator.generate(
                         quantities=state.remaining,
                         max_height=self.max_height,
+                        max_slenderness=self.max_slenderness,
                     )
                 )
 
@@ -311,6 +314,7 @@ if __name__ == "__main__":
         gap_y=20,
         edge_margin_x=20,
         edge_margin_y=20,
+        max_slenderness=3.0,
     )
 
     result = planner.search(
