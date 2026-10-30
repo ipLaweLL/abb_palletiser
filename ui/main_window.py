@@ -357,6 +357,60 @@ class MainWindow(QMainWindow):
             " mm"
         )
 
+        # X GAP
+        self.gap_x_input = (
+            QDoubleSpinBox()
+        )
+
+        self.gap_x_input.setRange(
+            0,
+            500
+        )
+
+        self.gap_x_input.setValue(
+            20
+        )
+
+        self.gap_x_input.setSuffix(
+            " mm"
+        )
+
+        # Y GAP
+        self.gap_y_input = (
+            QDoubleSpinBox()
+        )
+
+        self.gap_y_input.setRange(
+            0,
+            500
+        )
+
+        self.gap_y_input.setValue(
+            20
+        )
+
+        self.gap_y_input.setSuffix(
+            " mm"
+        )
+
+        # PALLET EDGE MARGIN
+        self.edge_margin_input = (
+            QDoubleSpinBox()
+        )
+
+        self.edge_margin_input.setRange(
+            0,
+            500
+        )
+
+        self.edge_margin_input.setValue(
+            20
+        )
+
+        self.edge_margin_input.setSuffix(
+            " mm"
+        )
+
         settings = [
 
             (
@@ -382,6 +436,21 @@ class MainWindow(QMainWindow):
             (
                 "Allowed Overhang",
                 self.overhang_input
+            ),
+
+            (
+                "X Gap",
+                self.gap_x_input
+            ),
+
+            (
+                "Y Gap",
+                self.gap_y_input
+            ),
+
+            (
+                "Edge Margin",
+                self.edge_margin_input
             ),
         ]
 
