@@ -55,6 +55,20 @@ class LayoutScorer:
             )
         )
 
+        execution_penalty = (
+            self._execution_sequence_penalty(
+                placed
+            )
+        )
+
+        fill_uniformity_penalty = (
+            self._fill_uniformity_penalty(
+                placed,
+                rows=3,
+                cols=3,
+            )
+        )
+
         cog_x, cog_y = (
             self._center_of_mass_xy(
                 placed
@@ -206,6 +220,8 @@ class LayoutScorer:
         return (
             unplaced_count,
             stability_penalty,
+            execution_penalty,
+            fill_uniformity_penalty,
             cog_distance_norm,
             footprint_underuse,
             aspect_error,
@@ -214,6 +230,238 @@ class LayoutScorer:
             wasted_ratio,
             len(placed),
         )
+
+    def _execution_sequence_penalty(
+        self,
+        placed: List[PlacedStack],
+    ) -> float:
+        """
+        Prefer a row-major spatial sweep that follows the robot
+        execution order 20L -> 10L -> 1L -> 4L.
+
+        This is a soft preference. Mixed 20L/10L stacks naturally
+        contribute to both execution stages at the same location.
+        """
+
+        priority = {
+            "20L": 0,
+            "10L": 1,
+            "1L": 2,
+            "4L": 3,
+        }
+
+        sku_positions = {
+            sku: []
+            for sku in priority
+        }
+
+        for stack in placed:
+
+            center_x = (
+                stack.x
+                + stack.length / 2.0
+            )
+            center_y = (
+                stack.y
+                + stack.width / 2.0
+            )
+
+            x_norm = (
+                center_x / self.pallet_length
+                if self.pallet_length > 0
+                else 0.0
+            )
+            y_norm = (
+                center_y / self.pallet_width
+                if self.pallet_width > 0
+                else 0.0
+            )
+
+            # Row-major sweep: fill X first, then move upward in Y.
+            sweep_position = (
+                y_norm + 0.35 * x_norm
+            )
+
+            for sku in set(
+                stack.candidate.items
+            ):
+                if sku in sku_positions:
+                    sku_positions[sku].append(
+                        sweep_position
+                    )
+
+        means = {}
+
+        for sku, values in (
+            sku_positions.items()
+        ):
+            if values:
+                means[sku] = (
+                    sum(values)
+                    / len(values)
+                )
+
+        ordered_skus = [
+            "20L",
+            "10L",
+            "1L",
+            "4L",
+        ]
+
+        penalty = 0.0
+
+        for left_index in range(
+            len(ordered_skus)
+        ):
+            left_sku = (
+                ordered_skus[left_index]
+            )
+
+            if left_sku not in means:
+                continue
+
+            for right_index in range(
+                left_index + 1,
+                len(ordered_skus),
+            ):
+                right_sku = (
+                    ordered_skus[
+                        right_index
+                    ]
+                )
+
+                if right_sku not in means:
+                    continue
+
+                inversion = (
+                    means[left_sku]
+                    - means[right_sku]
+                )
+
+                if inversion > 0:
+                    penalty += (
+                        inversion ** 2
+                    )
+
+        return penalty
+
+    def _fill_uniformity_penalty(
+        self,
+        placed: List[PlacedStack],
+        rows: int,
+        cols: int,
+    ) -> float:
+        """
+        Measure how evenly occupied footprint area is distributed
+        over a coarse pallet grid.
+
+        Lower is better. Zero means equal occupied area in every cell.
+        """
+
+        if (
+            not placed
+            or rows <= 0
+            or cols <= 0
+            or self.pallet_length <= 0
+            or self.pallet_width <= 0
+        ):
+            return 0.0
+
+        cell_width = (
+            self.pallet_length / cols
+        )
+        cell_height = (
+            self.pallet_width / rows
+        )
+
+        cell_areas = []
+
+        for row in range(rows):
+
+            cell_y0 = (
+                row * cell_height
+            )
+            cell_y1 = (
+                cell_y0 + cell_height
+            )
+
+            for col in range(cols):
+
+                cell_x0 = (
+                    col * cell_width
+                )
+                cell_x1 = (
+                    cell_x0 + cell_width
+                )
+
+                occupied = 0.0
+
+                for stack in placed:
+
+                    overlap_x = max(
+                        0.0,
+                        min(
+                            stack.right,
+                            cell_x1,
+                        )
+                        - max(
+                            stack.x,
+                            cell_x0,
+                        ),
+                    )
+
+                    overlap_y = max(
+                        0.0,
+                        min(
+                            stack.top,
+                            cell_y1,
+                        )
+                        - max(
+                            stack.y,
+                            cell_y0,
+                        ),
+                    )
+
+                    occupied += (
+                        overlap_x
+                        * overlap_y
+                    )
+
+                cell_areas.append(
+                    occupied
+                )
+
+        total_occupied = sum(
+            cell_areas
+        )
+
+        if total_occupied <= 0:
+            return 0.0
+
+        mean_area = (
+            total_occupied
+            / len(cell_areas)
+        )
+
+        if mean_area <= 0:
+            return 0.0
+
+        normalized_variance = (
+            sum(
+                (
+                    (
+                        area
+                        - mean_area
+                    )
+                    / mean_area
+                ) ** 2
+                for area
+                in cell_areas
+            )
+            / len(cell_areas)
+        )
+
+        return normalized_variance
 
     def _stability_penalty(
         self,
