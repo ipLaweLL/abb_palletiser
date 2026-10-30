@@ -1,3 +1,4 @@
+from math import hypot
 from typing import List, Tuple
 
 from planner.extreme_points import PlacedStack
@@ -5,17 +6,18 @@ from planner.extreme_points import PlacedStack
 
 class LayoutScorer:
     """
-    Lexicographic scoring for partial and complete pallet layouts.
+    Stability-aware lexicographic scoring for pallet layouts.
 
     Lower tuples are better.
 
     Priorities:
       1. Place all requested items.
-      2. Keep center of mass near pallet center.
-      3. Use the pallet footprint in both X and Y.
-      4. Avoid excessive height and height variation.
-      5. Reduce wasted floor area.
-      6. Prefer fewer floor positions only after quality constraints.
+      2. Prefer stable height transitions and avoid isolated tall towers.
+      3. Keep weighted mass near the pallet center.
+      4. Use the pallet footprint in both X and Y.
+      5. Avoid excessive overall height and height variation.
+      6. Reduce wasted floor area.
+      7. Prefer fewer floor positions only after layout quality.
     """
 
     def __init__(
@@ -42,8 +44,16 @@ class LayoutScorer:
                 float("inf"),
                 float("inf"),
                 float("inf"),
+                float("inf"),
+                float("inf"),
                 0,
             )
+
+        stability_penalty = (
+            self._stability_penalty(
+                placed
+            )
+        )
 
         cog_x, cog_y = (
             self._center_of_mass_xy(
@@ -54,15 +64,25 @@ class LayoutScorer:
         target_x = (
             self.pallet_length / 2.0
         )
-
         target_y = (
             self.pallet_width / 2.0
         )
 
-        cog_distance_sq = (
-            (cog_x - target_x) ** 2
-            +
-            (cog_y - target_y) ** 2
+        pallet_diagonal = hypot(
+            self.pallet_length,
+            self.pallet_width,
+        )
+
+        cog_distance = hypot(
+            cog_x - target_x,
+            cog_y - target_y,
+        )
+
+        cog_distance_norm = (
+            cog_distance
+            / pallet_diagonal
+            if pallet_diagonal > 0
+            else 0.0
         )
 
         min_x = min(
@@ -96,11 +116,9 @@ class LayoutScorer:
             else float("inf")
         )
 
-        aspect_error = (
-            abs(
-                layout_ratio
-                - target_ratio
-            )
+        aspect_error = abs(
+            layout_ratio
+            - target_ratio
         )
 
         coverage_x = (
@@ -127,9 +145,26 @@ class LayoutScorer:
             heights
         )
 
+        height_ratio = (
+            max_stack_height
+            / self.max_height
+            if self.max_height > 0
+            else 0.0
+        )
+
+        normalized_heights = [
+            (
+                height
+                / self.max_height
+                if self.max_height > 0
+                else 0.0
+            )
+            for height in heights
+        ]
+
         mean_height = (
-            sum(heights)
-            / len(heights)
+            sum(normalized_heights)
+            / len(normalized_heights)
         )
 
         height_variance = (
@@ -139,16 +174,9 @@ class LayoutScorer:
                     - mean_height
                 ) ** 2
                 for height
-                in heights
+                in normalized_heights
             )
-            / len(heights)
-        )
-
-        height_ratio = (
-            max_stack_height
-            / self.max_height
-            if self.max_height > 0
-            else 0.0
+            / len(normalized_heights)
         )
 
         used_area = sum(
@@ -168,15 +196,219 @@ class LayoutScorer:
             - used_area,
         )
 
+        wasted_ratio = (
+            wasted_area
+            / bounding_area
+            if bounding_area > 0
+            else 0.0
+        )
+
         return (
             unplaced_count,
-            cog_distance_sq,
+            stability_penalty,
+            cog_distance_norm,
             footprint_underuse,
             aspect_error,
             height_ratio,
             height_variance,
-            wasted_area,
+            wasted_ratio,
             len(placed),
+        )
+
+    def _stability_penalty(
+        self,
+        placed: List[PlacedStack],
+    ) -> float:
+
+        if not placed:
+            return 0.0
+
+        total_weight = sum(
+            stack.candidate.weight
+            for stack in placed
+        )
+
+        pallet_diagonal = hypot(
+            self.pallet_length,
+            self.pallet_width,
+        )
+
+        target_x = (
+            self.pallet_length / 2.0
+        )
+        target_y = (
+            self.pallet_width / 2.0
+        )
+
+        neighbor_height_penalty = 0.0
+        isolation_penalty = 0.0
+        top_heavy_penalty = 0.0
+
+        for index, stack in enumerate(
+            placed
+        ):
+
+            height_ratio = (
+                stack.candidate.height
+                / self.max_height
+                if self.max_height > 0
+                else 0.0
+            )
+
+            center_x = (
+                stack.x
+                + stack.length / 2.0
+            )
+            center_y = (
+                stack.y
+                + stack.width / 2.0
+            )
+
+            center_distance_norm = (
+                hypot(
+                    center_x - target_x,
+                    center_y - target_y,
+                )
+                / pallet_diagonal
+                if pallet_diagonal > 0
+                else 0.0
+            )
+
+            weight_share = (
+                stack.candidate.weight
+                / total_weight
+                if total_weight > 0
+                else 0.0
+            )
+
+            top_heavy_penalty += (
+                (height_ratio ** 2)
+                * weight_share
+                * (
+                    1.0
+                    + center_distance_norm
+                )
+            )
+
+            nearest_distance = None
+
+            for other_index, other in enumerate(
+                placed
+            ):
+
+                if other_index == index:
+                    continue
+
+                edge_distance = (
+                    self._edge_distance(
+                        stack,
+                        other,
+                    )
+                )
+
+                if (
+                    nearest_distance is None
+                    or
+                    edge_distance
+                    < nearest_distance
+                ):
+                    nearest_distance = (
+                        edge_distance
+                    )
+
+            if nearest_distance is not None:
+
+                nearest_norm = (
+                    nearest_distance
+                    / pallet_diagonal
+                    if pallet_diagonal > 0
+                    else 0.0
+                )
+
+                isolation_penalty += (
+                    (height_ratio ** 2)
+                    * nearest_norm
+                )
+
+        for left_index in range(
+            len(placed)
+        ):
+
+            left = placed[left_index]
+
+            for right_index in range(
+                left_index + 1,
+                len(placed),
+            ):
+
+                right = placed[
+                    right_index
+                ]
+
+                distance = (
+                    self._edge_distance(
+                        left,
+                        right,
+                    )
+                )
+
+                proximity = (
+                    1.0
+                    / (
+                        1.0
+                        + distance / 300.0
+                    )
+                )
+
+                height_difference = (
+                    abs(
+                        left.candidate.height
+                        - right.candidate.height
+                    )
+                    / self.max_height
+                    if self.max_height > 0
+                    else 0.0
+                )
+
+                neighbor_height_penalty += (
+                    proximity
+                    * (
+                        height_difference ** 2
+                    )
+                )
+
+        return (
+            4.0
+            * neighbor_height_penalty
+            +
+            3.0
+            * isolation_penalty
+            +
+            2.0
+            * top_heavy_penalty
+        )
+
+    @staticmethod
+    def _edge_distance(
+        first: PlacedStack,
+        second: PlacedStack,
+    ) -> float:
+
+        dx = max(
+            0.0,
+            first.x - second.right,
+            second.x - first.right,
+        )
+
+        dy = max(
+            0.0,
+            first.y - second.top,
+            second.y - first.top,
+        )
+
+        return hypot(
+            dx,
+            dy,
         )
 
     @staticmethod
