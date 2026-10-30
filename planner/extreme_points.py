@@ -164,7 +164,7 @@ class ExtremePointPlacer:
             ):
                 continue
 
-            if self._point_inside_any_stack(
+            if self._point_blocked_by_any_stack(
                 point,
                 placed,
             ):
@@ -245,20 +245,20 @@ class ExtremePointPlacer:
         return not separated
 
     @staticmethod
-    def _point_inside_any_stack(
+    def _point_blocked_by_any_stack(
         point: ExtremePoint,
         placed: List[PlacedStack],
     ) -> bool:
 
         for stack in placed:
-            inside_x = (
-                stack.x < point.x < stack.right
+            on_or_inside_x = (
+                stack.x <= point.x < stack.right
             )
-            inside_y = (
-                stack.y < point.y < stack.top
+            on_or_inside_y = (
+                stack.y <= point.y < stack.top
             )
 
-            if inside_x and inside_y:
+            if on_or_inside_x and on_or_inside_y:
                 return True
 
         return False
