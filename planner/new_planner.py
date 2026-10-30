@@ -1,3 +1,4 @@
+from math import floor
 from typing import Dict, List
 
 from config.products import PRODUCTS
@@ -65,6 +66,41 @@ class NewPalletPlanner:
             + 2.0 * overhang
         )
 
+        active_skus = [
+            sku
+            for sku, quantity
+            in quantities.items()
+            if quantity > 0
+        ]
+
+        if len(active_skus) == 1:
+            sku = active_skus[0]
+            capacity = self._single_sku_capacity(
+                sku=sku,
+                pallet_length=effective_length,
+                pallet_width=effective_width,
+                max_height=max_height,
+                gap_x=gap_x,
+                gap_y=gap_y,
+                edge_margin_x=edge_margin_x,
+                edge_margin_y=edge_margin_y,
+            )
+
+            requested = int(
+                quantities[sku]
+            )
+
+            if requested > capacity:
+                return PlannerResult(
+                    success=False,
+                    error=(
+                        f"Requested {requested} x {sku}, but the "
+                        f"current pallet/gap settings can hold at most "
+                        f"{capacity}. Reduce gaps/margins, increase pallet "
+                        f"size, or split the order across pallets."
+                    ),
+                )
+
         planner = BeamSearchPlanner(
             pallet_length=effective_length,
             pallet_width=effective_width,
@@ -79,6 +115,33 @@ class NewPalletPlanner:
         state = planner.search(
             quantities=quantities,
         )
+
+        if (
+            state.unplaced_count() != 0
+            and beam_width < 120
+        ):
+            retry_planner = BeamSearchPlanner(
+                pallet_length=effective_length,
+                pallet_width=effective_width,
+                max_height=max_height,
+                beam_width=120,
+                gap_x=gap_x,
+                gap_y=gap_y,
+                edge_margin_x=edge_margin_x,
+                edge_margin_y=edge_margin_y,
+            )
+
+            retry_state = retry_planner.search(
+                quantities=quantities,
+            )
+
+            if (
+                retry_state.unplaced_count()
+                < state.unplaced_count()
+                or
+                retry_state.unplaced_count() == 0
+            ):
+                state = retry_state
 
         if state.unplaced_count() != 0:
             remaining = {
@@ -104,6 +167,118 @@ class NewPalletPlanner:
         return PlannerResult(
             success=True,
             slots=slots,
+        )
+
+    @staticmethod
+    def _single_sku_capacity(
+        sku: str,
+        pallet_length: float,
+        pallet_width: float,
+        max_height: float,
+        gap_x: float,
+        gap_y: float,
+        edge_margin_x: float,
+        edge_margin_y: float,
+    ) -> int:
+
+        product = PRODUCTS[sku]
+
+        usable_length = max(
+            0.0,
+            pallet_length
+            - 2.0 * edge_margin_x,
+        )
+        usable_width = max(
+            0.0,
+            pallet_width
+            - 2.0 * edge_margin_y,
+        )
+
+        def positions(
+            item_length: float,
+            item_width: float,
+        ) -> int:
+
+            count_x = floor(
+                (
+                    usable_length
+                    + gap_x
+                )
+                /
+                (
+                    item_length
+                    + gap_x
+                )
+            )
+
+            count_y = floor(
+                (
+                    usable_width
+                    + gap_y
+                )
+                /
+                (
+                    item_width
+                    + gap_y
+                )
+            )
+
+            return max(
+                0,
+                count_x,
+            ) * max(
+                0,
+                count_y,
+            )
+
+        floor_positions = positions(
+            product.length,
+            product.width,
+        )
+
+        if product.allow_rotation:
+            floor_positions = max(
+                floor_positions,
+                positions(
+                    product.width,
+                    product.length,
+                ),
+            )
+
+        vertical_by_height = floor(
+            max_height
+            / product.height
+        )
+
+        family_slenderness = (
+            4.0
+            if product.family == "carton"
+            else 3.0
+        )
+
+        vertical_by_slenderness = floor(
+            (
+                family_slenderness
+                * min(
+                    product.length,
+                    product.width,
+                )
+            )
+            / product.height
+        )
+
+        vertical_count = max(
+            1,
+            min(
+                product.max_layers,
+                vertical_by_height,
+                vertical_by_slenderness,
+            ),
+        )
+
+        return (
+            floor_positions
+            * vertical_count
         )
 
     def _placed_to_slots(
