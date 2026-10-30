@@ -18,6 +18,7 @@ class StackGenerator:
         self,
         quantities: Dict[str, int],
         max_height: float,
+        max_slenderness: float = 3.0,
     ) -> List[StackCandidate]:
 
         available = {
@@ -40,6 +41,7 @@ class StackGenerator:
                 items=[bottom_sku],
                 remaining=remaining,
                 max_height=max_height,
+                max_slenderness=max_slenderness,
                 candidates=candidates,
                 seen=seen,
             )
@@ -60,6 +62,7 @@ class StackGenerator:
         items: List[str],
         remaining: Dict[str, int],
         max_height: float,
+        max_slenderness: float,
         candidates: List[StackCandidate],
         seen: set[Tuple[str, ...]],
     ) -> None:
@@ -105,6 +108,20 @@ class StackGenerator:
             if next_height > max_height:
                 continue
 
+            base = PRODUCTS[items[0]]
+            base_min_dimension = min(
+                base.length,
+                base.width,
+            )
+
+            if (
+                base_min_dimension > 0
+                and
+                next_height / base_min_dimension
+                > max_slenderness
+            ):
+                continue
+
             next_remaining = dict(remaining)
             next_remaining[next_sku] -= 1
 
@@ -112,6 +129,7 @@ class StackGenerator:
                 items=items + [next_sku],
                 remaining=next_remaining,
                 max_height=max_height,
+                max_slenderness=max_slenderness,
                 candidates=candidates,
                 seen=seen,
             )
@@ -208,6 +226,7 @@ if __name__ == "__main__":
             "20L": 2,
         },
         max_height=1600,
+        max_slenderness=3.0,
     )
 
     for candidate in candidates:
