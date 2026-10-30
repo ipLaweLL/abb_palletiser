@@ -3,6 +3,7 @@ from typing import List, Optional
 
 from config.products import PRODUCTS
 
+
 @dataclass
 class PalletSlot:
     id: int
@@ -22,6 +23,25 @@ class PalletSlot:
     level: int
 
     status: str = "PENDING"
+
+
+@dataclass
+class StackCandidate:
+    """
+    A legal vertical stack pattern that has not yet been positioned
+    on the pallet.
+
+    items are ordered bottom -> top.
+    """
+    items: List[str]
+
+    base_length: float
+    base_width: float
+
+    height: float
+    weight: float
+
+    rotation: float = 0.0
 
 
 @dataclass
