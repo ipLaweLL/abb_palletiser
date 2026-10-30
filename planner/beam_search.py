@@ -36,6 +36,10 @@ class BeamSearchPlanner:
         pallet_width: float,
         max_height: float,
         beam_width: int = 30,
+        gap_x: float = 20.0,
+        gap_y: float = 20.0,
+        edge_margin_x: float = 20.0,
+        edge_margin_y: float = 20.0,
     ) -> None:
 
         self.pallet_length = pallet_length
@@ -43,10 +47,19 @@ class BeamSearchPlanner:
         self.max_height = max_height
         self.beam_width = beam_width
 
+        self.gap_x = gap_x
+        self.gap_y = gap_y
+        self.edge_margin_x = edge_margin_x
+        self.edge_margin_y = edge_margin_y
+
         self.stack_generator = StackGenerator()
         self.placer = ExtremePointPlacer(
             pallet_length=pallet_length,
             pallet_width=pallet_width,
+            gap_x=gap_x,
+            gap_y=gap_y,
+            edge_margin_x=edge_margin_x,
+            edge_margin_y=edge_margin_y,
         )
 
         self.scorer = LayoutScorer(
@@ -294,6 +307,10 @@ if __name__ == "__main__":
         pallet_width=1000,
         max_height=1600,
         beam_width=30,
+        gap_x=20,
+        gap_y=20,
+        edge_margin_x=20,
+        edge_margin_y=20,
     )
 
     result = planner.search(
