@@ -114,11 +114,17 @@ class StackGenerator:
                 base.width,
             )
 
+            family_slenderness = (
+                4.0
+                if base.family == "carton"
+                else max_slenderness
+            )
+
             if (
                 base_min_dimension > 0
                 and
                 next_height / base_min_dimension
-                > max_slenderness
+                > family_slenderness
             ):
                 continue
 
