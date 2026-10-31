@@ -232,16 +232,37 @@ class OrderedSweepPlanner:
                 )
             )
 
+            current_cog = (
+                self._center_of_mass_xy(
+                    current
+                )
+            )
+
+            print(
+                f"\n4L RELOCATION CHECK "
+                f"stack_index={index}"
+            )
+
+            print(
+                f"Current position: "
+                f"X={stack.x:.0f} "
+                f"Y={stack.y:.0f} | "
+                f"BBox={current_bbox_area:,.0f} | "
+                f"CoG=({current_cog[0]:.1f}, "
+                f"{current_cog[1]:.1f})"
+            )
+
             best_stack = stack
             best_score = current_score
 
             for option in options:
 
-                if not self._option_inside_pocket(
-                    option,
-                    pockets,
-                ):
-                    continue
+                inside_pocket = (
+                    self._option_inside_pocket(
+                        option,
+                        pockets,
+                    )
+                )
 
                 trial = list(current)
                 trial[index] = option
@@ -252,12 +273,11 @@ class OrderedSweepPlanner:
                     )
                 )
 
-                if (
-                    trial_bbox_area
-                    > current_bbox_area
-                    + 1e-6
-                ):
-                    continue
+                trial_cog = (
+                    self._center_of_mass_xy(
+                        trial
+                    )
+                )
 
                 score = (
                     self._relocation_score(
@@ -265,7 +285,64 @@ class OrderedSweepPlanner:
                     )
                 )
 
-                if score < best_score:
+                reasons = []
+
+                if not inside_pocket:
+                    reasons.append(
+                        "not inside free pocket"
+                    )
+
+                if (
+                    trial_bbox_area
+                    > current_bbox_area
+                    + 1e-6
+                ):
+                    reasons.append(
+                        "bounding box increased"
+                    )
+
+                if (
+                    inside_pocket
+                    and
+                    trial_bbox_area
+                    <= current_bbox_area
+                    + 1e-6
+                    and
+                    score >= best_score
+                ):
+                    reasons.append(
+                        "score not improved"
+                    )
+
+                accepted_candidate = (
+                    inside_pocket
+                    and
+                    trial_bbox_area
+                    <= current_bbox_area
+                    + 1e-6
+                    and
+                    score < best_score
+                )
+
+                print(
+                    f"  Candidate "
+                    f"X={option.x:.0f} "
+                    f"Y={option.y:.0f} "
+                    f"R={option.rotation:.0f} | "
+                    f"BBox={trial_bbox_area:,.0f} "
+                    f"({trial_bbox_area - current_bbox_area:+,.0f}) | "
+                    f"CoG=({trial_cog[0]:.1f}, "
+                    f"{trial_cog[1]:.1f}) | "
+                    f"{'ACCEPT' if accepted_candidate else 'REJECT'}"
+                    + (
+                        ""
+                        if accepted_candidate
+                        else
+                        f": {', '.join(reasons)}"
+                    )
+                )
+
+                if accepted_candidate:
                     best_score = score
                     best_stack = option
 
@@ -406,6 +483,51 @@ class OrderedSweepPlanner:
             ),
             balance[0],
             balance[1],
+        )
+
+    def _center_of_mass_xy(
+        self,
+        placed: List[PlacedStack],
+    ):
+
+        if not placed:
+            return (
+                self.pallet_length / 2.0,
+                self.pallet_width / 2.0,
+            )
+
+        total_weight = sum(
+            stack.candidate.weight
+            for stack in placed
+        )
+
+        if total_weight <= 0:
+            return (
+                self.pallet_length / 2.0,
+                self.pallet_width / 2.0,
+            )
+
+        cog_x = sum(
+            (
+                stack.x
+                + stack.length / 2.0
+            )
+            * stack.candidate.weight
+            for stack in placed
+        ) / total_weight
+
+        cog_y = sum(
+            (
+                stack.y
+                + stack.width / 2.0
+            )
+            * stack.candidate.weight
+            for stack in placed
+        ) / total_weight
+
+        return (
+            cog_x,
+            cog_y,
         )
 
     def _balance_score(
