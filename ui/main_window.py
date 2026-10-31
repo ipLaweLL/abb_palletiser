@@ -36,6 +36,7 @@ from planner.rules import can_stack
 from robot.abb_client import ABBClient
 
 from planner.new_planner import NewPalletPlanner
+from planner.free_space import FreeRect, calculate_free_rectangles
 from ui.pallet_view import Pallet3DView
 from execution.pallet_executor import PalletExecutor
 
@@ -946,73 +947,88 @@ class MainWindow(QMainWindow):
 
     def _update_free_space(self) -> None:
 
-        pallet_length = (
-            self.length_input.value()
-        )
+        pallet_length = self.length_input.value()
+        pallet_width = self.width_input.value()
+        edge_margin = self.edge_margin_input.value()
+        gap_x = self.gap_x_input.value()
+        gap_y = self.gap_y_input.value()
 
-        pallet_width = (
-            self.width_input.value()
-        )
-
-        edge_margin = (
-            self.edge_margin_input.value()
-        )
-
-        usable_length = max(
-            0.0,
-            pallet_length
-            - 2.0 * edge_margin
-        )
-
-        usable_width = max(
-            0.0,
-            pallet_width
-            - 2.0 * edge_margin
-        )
-
-        usable_area = (
-            usable_length
-            * usable_width
-        )
-
-        floor_area = 0.0
-        seen_stacks = set()
+        stack_bases = {}
 
         for slot in self.slots:
 
-            if slot.stack_id in seen_stacks:
+            if slot.stack_id in stack_bases:
                 continue
 
-            seen_stacks.add(
-                slot.stack_id
+            stack_bases[slot.stack_id] = FreeRect(
+                x=slot.x - slot.length / 2.0,
+                y=slot.y - slot.width / 2.0,
+                width=slot.length,
+                height=slot.width,
             )
 
-            floor_area += (
-                slot.length
-                * slot.width
-            )
+        pockets = calculate_free_rectangles(
+            pallet_length=pallet_length,
+            pallet_width=pallet_width,
+            edge_margin_x=edge_margin,
+            edge_margin_y=edge_margin,
+            gap_x=gap_x,
+            gap_y=gap_y,
+            occupied_rectangles=stack_bases.values(),
+        )
 
-        free_area = max(
+        usable_area = max(
             0.0,
-            usable_area
-            - floor_area
+            (pallet_length - 2.0 * edge_margin)
+            * (pallet_width - 2.0 * edge_margin),
+        )
+
+        free_area = sum(
+            pocket.area
+            for pocket in pockets
         )
 
         free_percent = (
-            (
-                free_area
-                / usable_area
-            )
-            * 100.0
+            free_area / usable_area * 100.0
             if usable_area > 0
             else 0.0
         )
 
-        self.free_space_label.setText(
-            f"Free Floor Area: "
-            f"{free_area:,.0f} mm² "
-            f"({free_percent:.1f}% free)"
-        )
+        if pockets:
+
+            largest = pockets[0]
+
+            self.free_space_label.setText(
+                f"Free Pockets: {len(pockets)} | "
+                f"Free Area: {free_area:,.0f} mm² "
+                f"({free_percent:.1f}%) | "
+                f"Largest: "
+                f"{largest.width:.0f}×"
+                f"{largest.height:.0f} mm"
+            )
+
+        else:
+
+            self.free_space_label.setText(
+                "Free Pockets: 0 | "
+                "Free Area: 0 mm² (0.0%)"
+            )
+
+        print("\nFREE PALLET POCKETS")
+
+        for index, pocket in enumerate(
+            pockets,
+            start=1,
+        ):
+
+            print(
+                f"{index}: "
+                f"X={pocket.x:.0f} "
+                f"Y={pocket.y:.0f} "
+                f"W={pocket.width:.0f} "
+                f"H={pocket.height:.0f} "
+                f"Area={pocket.area:,.0f}"
+            )
 
     # ========================================================
     # UPDATE STATUS
