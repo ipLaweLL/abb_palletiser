@@ -178,16 +178,26 @@ class OrderedSweepPlanner:
         sku: str,
     ) -> List[PlacedStack]:
         """
-        Controlled experiment:
-          - only move stacks belonging to the requested final SKU
-          - all earlier SKU stacks remain fixed
-          - accept a move only if the complete pallet balance improves
+        Controlled relocation test for the final SKU only.
+
+        Rules:
+          - original full-layout free pockets are the only allowed targets
+          - earlier SKU stacks never move
+          - the moving stack is removed only for collision checking
+          - accept a move only if CoG distance to pallet center improves
+          - prefer the smallest suitable original pocket
         """
 
         if not placed:
             return placed
 
         current = list(placed)
+
+        original_pockets = (
+            self._free_pockets(
+                current
+            )
+        )
 
         for index, stack in enumerate(
             list(current)
@@ -207,12 +217,6 @@ class OrderedSweepPlanner:
                 if position != index
             ]
 
-            pockets = (
-                self._free_pockets(
-                    fixed
-                )
-            )
-
             options = (
                 self.placer.feasible_placements(
                     candidate=stack.candidate,
@@ -220,22 +224,16 @@ class OrderedSweepPlanner:
                 )
             )
 
-            current_score = (
-                self._relocation_score(
+            current_cog_distance = (
+                self._cog_distance_to_center(
                     current
                 )
             )
 
-            current_bbox_area = (
-                self._bounding_box_area(
-                    current
-                )
-            )
-
-            current_cog = (
-                self._center_of_mass_xy(
-                    current
-                )
+            best_stack = stack
+            best_key = (
+                current_cog_distance,
+                float("inf"),
             )
 
             print(
@@ -247,81 +245,56 @@ class OrderedSweepPlanner:
                 f"Current position: "
                 f"X={stack.x:.0f} "
                 f"Y={stack.y:.0f} | "
-                f"BBox={current_bbox_area:,.0f} | "
-                f"CoG=({current_cog[0]:.1f}, "
-                f"{current_cog[1]:.1f})"
+                f"CoG distance="
+                f"{current_cog_distance:.1f}"
             )
-
-            best_stack = stack
-            best_score = current_score
 
             for option in options:
 
-                inside_pocket = (
-                    self._option_inside_pocket(
+                pocket = (
+                    self._containing_original_pocket(
                         option,
-                        pockets,
+                        original_pockets,
                     )
                 )
 
                 trial = list(current)
                 trial[index] = option
 
-                trial_bbox_area = (
-                    self._bounding_box_area(
+                trial_cog_distance = (
+                    self._cog_distance_to_center(
                         trial
                     )
                 )
 
-                trial_cog = (
-                    self._center_of_mass_xy(
-                        trial
+                if pocket is None:
+
+                    print(
+                        f"  Candidate "
+                        f"X={option.x:.0f} "
+                        f"Y={option.y:.0f} "
+                        f"R={option.rotation:.0f} | "
+                        f"CoG distance="
+                        f"{trial_cog_distance:.1f} | "
+                        f"REJECT: not inside original free pocket"
                     )
+
+                    continue
+
+                improvement = (
+                    current_cog_distance
+                    - trial_cog_distance
                 )
 
-                score = (
-                    self._relocation_score(
-                        trial
-                    )
+                key = (
+                    trial_cog_distance,
+                    pocket.area,
                 )
-
-                reasons = []
-
-                if not inside_pocket:
-                    reasons.append(
-                        "not inside free pocket"
-                    )
-
-                if (
-                    trial_bbox_area
-                    > current_bbox_area
-                    + 1e-6
-                ):
-                    reasons.append(
-                        "bounding box increased"
-                    )
-
-                if (
-                    inside_pocket
-                    and
-                    trial_bbox_area
-                    <= current_bbox_area
-                    + 1e-6
-                    and
-                    score >= best_score
-                ):
-                    reasons.append(
-                        "score not improved"
-                    )
 
                 accepted_candidate = (
-                    inside_pocket
+                    improvement > 1e-6
                     and
-                    trial_bbox_area
-                    <= current_bbox_area
-                    + 1e-6
-                    and
-                    score < best_score
+                    key < best_key
                 )
 
                 print(
@@ -329,26 +302,88 @@ class OrderedSweepPlanner:
                     f"X={option.x:.0f} "
                     f"Y={option.y:.0f} "
                     f"R={option.rotation:.0f} | "
-                    f"BBox={trial_bbox_area:,.0f} "
-                    f"({trial_bbox_area - current_bbox_area:+,.0f}) | "
-                    f"CoG=({trial_cog[0]:.1f}, "
-                    f"{trial_cog[1]:.1f}) | "
+                    f"Pocket="
+                    f"{pocket.width:.0f}x"
+                    f"{pocket.height:.0f} | "
+                    f"CoG distance="
+                    f"{trial_cog_distance:.1f} "
+                    f"({-improvement:+.1f}) | "
                     f"{'ACCEPT' if accepted_candidate else 'REJECT'}"
                     + (
                         ""
                         if accepted_candidate
                         else
-                        f": {', '.join(reasons)}"
+                        ": CoG not improved enough"
                     )
                 )
 
                 if accepted_candidate:
-                    best_score = score
                     best_stack = option
+                    best_key = key
 
             current[index] = best_stack
 
         return current
+
+    def _containing_original_pocket(
+        self,
+        option: PlacedStack,
+        pockets: List[FreeRect],
+    ):
+
+        half_gap_x = (
+            self.gap_x / 2.0
+        )
+        half_gap_y = (
+            self.gap_y / 2.0
+        )
+
+        required_x0 = (
+            option.x
+            - half_gap_x
+        )
+        required_y0 = (
+            option.y
+            - half_gap_y
+        )
+        required_x1 = (
+            option.right
+            + half_gap_x
+        )
+        required_y1 = (
+            option.top
+            + half_gap_y
+        )
+
+        containing = [
+            pocket
+            for pocket in pockets
+            if (
+                required_x0
+                >= pocket.x - 1e-6
+                and
+                required_y0
+                >= pocket.y - 1e-6
+                and
+                required_x1
+                <= pocket.right + 1e-6
+                and
+                required_y1
+                <= pocket.top + 1e-6
+            )
+        ]
+
+        if not containing:
+            return None
+
+        return min(
+            containing,
+            key=lambda pocket: (
+                pocket.area,
+                pocket.y,
+                pocket.x,
+            ),
+        )
 
     def _free_pockets(
         self,
@@ -484,6 +519,36 @@ class OrderedSweepPlanner:
             balance[0],
             balance[1],
         )
+
+    def _cog_distance_to_center(
+        self,
+        placed: List[PlacedStack],
+    ) -> float:
+
+        cog_x, cog_y = (
+            self._center_of_mass_xy(
+                placed
+            )
+        )
+
+        target_x = (
+            self.pallet_length
+            / 2.0
+        )
+        target_y = (
+            self.pallet_width
+            / 2.0
+        )
+
+        return (
+            (
+                cog_x - target_x
+            ) ** 2
+            +
+            (
+                cog_y - target_y
+            ) ** 2
+        ) ** 0.5
 
     def _center_of_mass_xy(
         self,
