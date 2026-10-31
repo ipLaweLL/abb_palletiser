@@ -8,6 +8,10 @@ from planner.extreme_points import (
     PlacedStack,
 )
 from planner.models import StackCandidate
+from planner.free_space import (
+    FreeRect,
+    calculate_free_rectangles,
+)
 
 
 EXECUTION_ORDER = (
@@ -156,9 +160,291 @@ class OrderedSweepPlanner:
                     candidate.items
                 )
 
+        optimized = (
+            self._relocate_last_sku(
+                placed=placed,
+                sku="4L",
+            )
+        )
+
         return OrderedSweepState(
-            placed=placed,
+            placed=optimized,
             remaining=remaining,
+        )
+
+    def _relocate_last_sku(
+        self,
+        placed: List[PlacedStack],
+        sku: str,
+    ) -> List[PlacedStack]:
+        """
+        Controlled experiment:
+          - only move stacks belonging to the requested final SKU
+          - all earlier SKU stacks remain fixed
+          - accept a move only if the complete pallet balance improves
+        """
+
+        if not placed:
+            return placed
+
+        current = list(placed)
+
+        for index, stack in enumerate(
+            list(current)
+        ):
+
+            stack_sku = (
+                stack.candidate.items[0]
+            )
+
+            if stack_sku != sku:
+                continue
+
+            fixed = [
+                other
+                for position, other
+                in enumerate(current)
+                if position != index
+            ]
+
+            pockets = (
+                self._free_pockets(
+                    fixed
+                )
+            )
+
+            options = (
+                self.placer.feasible_placements(
+                    candidate=stack.candidate,
+                    placed=fixed,
+                )
+            )
+
+            current_score = (
+                self._balance_score(
+                    current
+                )
+            )
+
+            best_stack = stack
+            best_score = current_score
+
+            for option in options:
+
+                if not self._option_inside_pocket(
+                    option,
+                    pockets,
+                ):
+                    continue
+
+                trial = list(current)
+                trial[index] = option
+
+                score = (
+                    self._balance_score(
+                        trial
+                    )
+                )
+
+                if score < best_score:
+                    best_score = score
+                    best_stack = option
+
+            current[index] = best_stack
+
+        return current
+
+    def _free_pockets(
+        self,
+        placed: List[PlacedStack],
+    ) -> List[FreeRect]:
+
+        occupied = [
+            FreeRect(
+                x=stack.x,
+                y=stack.y,
+                width=stack.length,
+                height=stack.width,
+            )
+            for stack in placed
+        ]
+
+        return calculate_free_rectangles(
+            pallet_length=(
+                self.pallet_length
+            ),
+            pallet_width=(
+                self.pallet_width
+            ),
+            edge_margin_x=(
+                self.edge_margin_x
+            ),
+            edge_margin_y=(
+                self.edge_margin_y
+            ),
+            gap_x=self.gap_x,
+            gap_y=self.gap_y,
+            occupied_rectangles=occupied,
+        )
+
+    def _option_inside_pocket(
+        self,
+        option: PlacedStack,
+        pockets: List[FreeRect],
+    ) -> bool:
+
+        half_gap_x = (
+            self.gap_x / 2.0
+        )
+        half_gap_y = (
+            self.gap_y / 2.0
+        )
+
+        required_x0 = (
+            option.x
+            - half_gap_x
+        )
+        required_y0 = (
+            option.y
+            - half_gap_y
+        )
+        required_x1 = (
+            option.right
+            + half_gap_x
+        )
+        required_y1 = (
+            option.top
+            + half_gap_y
+        )
+
+        return any(
+            required_x0
+            >= pocket.x - 1e-6
+            and
+            required_y0
+            >= pocket.y - 1e-6
+            and
+            required_x1
+            <= pocket.right + 1e-6
+            and
+            required_y1
+            <= pocket.top + 1e-6
+            for pocket in pockets
+        )
+
+    def _balance_score(
+        self,
+        placed: List[PlacedStack],
+    ):
+        """
+        Lower is better.
+
+        Use stack weight to measure pallet center-of-mass balance,
+        then use occupied footprint center as a secondary tie-breaker.
+        """
+
+        if not placed:
+            return (
+                0.0,
+                0.0,
+            )
+
+        total_weight = sum(
+            stack.candidate.weight
+            for stack in placed
+        )
+
+        target_x = (
+            self.pallet_length
+            / 2.0
+        )
+        target_y = (
+            self.pallet_width
+            / 2.0
+        )
+
+        if total_weight > 0:
+
+            cog_x = sum(
+                (
+                    stack.x
+                    + stack.length / 2.0
+                )
+                * stack.candidate.weight
+                for stack in placed
+            ) / total_weight
+
+            cog_y = sum(
+                (
+                    stack.y
+                    + stack.width / 2.0
+                )
+                * stack.candidate.weight
+                for stack in placed
+            ) / total_weight
+
+        else:
+            cog_x = target_x
+            cog_y = target_y
+
+        cog_offset = (
+            (
+                cog_x
+                - target_x
+            ) ** 2
+            +
+            (
+                cog_y
+                - target_y
+            ) ** 2
+        )
+
+        min_x = min(
+            stack.x
+            for stack in placed
+        )
+        min_y = min(
+            stack.y
+            for stack in placed
+        )
+        max_x = max(
+            stack.right
+            for stack in placed
+        )
+        max_y = max(
+            stack.top
+            for stack in placed
+        )
+
+        footprint_center_x = (
+            min_x + max_x
+        ) / 2.0
+
+        footprint_center_y = (
+            min_y + max_y
+        ) / 2.0
+
+        footprint_offset = (
+            (
+                footprint_center_x
+                - target_x
+            ) ** 2
+            +
+            (
+                footprint_center_y
+                - target_y
+            ) ** 2
+        )
+
+        return (
+            round(
+                cog_offset,
+                6,
+            ),
+            round(
+                footprint_offset,
+                6,
+            ),
         )
 
     def _build_sku_columns(
