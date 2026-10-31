@@ -221,7 +221,13 @@ class OrderedSweepPlanner:
             )
 
             current_score = (
-                self._balance_score(
+                self._relocation_score(
+                    current
+                )
+            )
+
+            current_bbox_area = (
+                self._bounding_box_area(
                     current
                 )
             )
@@ -240,8 +246,21 @@ class OrderedSweepPlanner:
                 trial = list(current)
                 trial[index] = option
 
+                trial_bbox_area = (
+                    self._bounding_box_area(
+                        trial
+                    )
+                )
+
+                if (
+                    trial_bbox_area
+                    > current_bbox_area
+                    + 1e-6
+                ):
+                    continue
+
                 score = (
-                    self._balance_score(
+                    self._relocation_score(
                         trial
                     )
                 )
@@ -330,6 +349,63 @@ class OrderedSweepPlanner:
             required_y1
             <= pocket.top + 1e-6
             for pocket in pockets
+        )
+
+    def _bounding_box_area(
+        self,
+        placed: List[PlacedStack],
+    ) -> float:
+
+        if not placed:
+            return 0.0
+
+        min_x = min(
+            stack.x
+            for stack in placed
+        )
+        min_y = min(
+            stack.y
+            for stack in placed
+        )
+        max_x = max(
+            stack.right
+            for stack in placed
+        )
+        max_y = max(
+            stack.top
+            for stack in placed
+        )
+
+        return (
+            max_x - min_x
+        ) * (
+            max_y - min_y
+        )
+
+    def _relocation_score(
+        self,
+        placed: List[PlacedStack],
+    ):
+
+        bbox_area = (
+            self._bounding_box_area(
+                placed
+            )
+        )
+
+        balance = (
+            self._balance_score(
+                placed
+            )
+        )
+
+        return (
+            round(
+                bbox_area,
+                6,
+            ),
+            balance[0],
+            balance[1],
         )
 
     def _balance_score(
