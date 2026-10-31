@@ -251,6 +251,22 @@ class MainWindow(QMainWindow):
             2
         )
 
+        self.free_space_label = (
+            QLabel(
+                "Free Floor Area: -"
+            )
+        )
+
+        delivery_grid.addWidget(
+
+            self.free_space_label,
+
+            6,
+            0,
+            1,
+            3
+        )
+
         # ----------------------------------------------------
         # PALLET SETTINGS
         # ----------------------------------------------------
@@ -813,6 +829,10 @@ class MainWindow(QMainWindow):
                 "0 / 0"
             )
 
+            self.free_space_label.setText(
+                "Free Floor Area: -"
+            )
+
             self.status_label.setText(
                 "Status: Cannot build pallet"
             )
@@ -839,6 +859,7 @@ class MainWindow(QMainWindow):
             "Status: Pallet generated"
         )
 
+        self._update_free_space()
         self.update_status()
         self._refresh_views()
 
@@ -918,6 +939,80 @@ class MainWindow(QMainWindow):
         self.update_status()
         self._refresh_views()
 
+
+    # ========================================================
+    # UPDATE FREE FLOOR SPACE
+    # ========================================================
+
+    def _update_free_space(self) -> None:
+
+        pallet_length = (
+            self.length_input.value()
+        )
+
+        pallet_width = (
+            self.width_input.value()
+        )
+
+        edge_margin = (
+            self.edge_margin_input.value()
+        )
+
+        usable_length = max(
+            0.0,
+            pallet_length
+            - 2.0 * edge_margin
+        )
+
+        usable_width = max(
+            0.0,
+            pallet_width
+            - 2.0 * edge_margin
+        )
+
+        usable_area = (
+            usable_length
+            * usable_width
+        )
+
+        floor_area = 0.0
+        seen_stacks = set()
+
+        for slot in self.slots:
+
+            if slot.stack_id in seen_stacks:
+                continue
+
+            seen_stacks.add(
+                slot.stack_id
+            )
+
+            floor_area += (
+                slot.length
+                * slot.width
+            )
+
+        free_area = max(
+            0.0,
+            usable_area
+            - floor_area
+        )
+
+        free_percent = (
+            (
+                free_area
+                / usable_area
+            )
+            * 100.0
+            if usable_area > 0
+            else 0.0
+        )
+
+        self.free_space_label.setText(
+            f"Free Floor Area: "
+            f"{free_area:,.0f} mm² "
+            f"({free_percent:.1f}% free)"
+        )
 
     # ========================================================
     # UPDATE STATUS
