@@ -22,6 +22,62 @@ class FreeRect:
         return self.width * self.height
 
 
+def fitting_skus(
+    pocket: FreeRect,
+    products,
+    gap_x: float,
+    gap_y: float,
+) -> List[str]:
+    """
+    Return SKUs whose floor footprint can fit inside this free pocket.
+
+    The pocket already reserves half the configured gap around existing
+    stacks. The candidate reserves its own half-gap on each side, so
+    the required pocket size is footprint + full configured gap.
+    """
+
+    fits = []
+
+    for sku, product in products.items():
+
+        required_length = (
+            product.length
+            + gap_x
+        )
+
+        required_width = (
+            product.width
+            + gap_y
+        )
+
+        normal_fit = (
+            required_length
+            <= pocket.width
+            and
+            required_width
+            <= pocket.height
+        )
+
+        rotated_fit = False
+
+        if product.allow_rotation:
+
+            rotated_fit = (
+                product.width
+                + gap_x
+                <= pocket.width
+                and
+                product.length
+                + gap_y
+                <= pocket.height
+            )
+
+        if normal_fit or rotated_fit:
+            fits.append(sku)
+
+    return fits
+
+
 def calculate_free_rectangles(
     pallet_length: float,
     pallet_width: float,
