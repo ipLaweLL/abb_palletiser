@@ -75,6 +75,15 @@ class OrderedSweepPlanner:
             max_height
         )
 
+        self.gap_x = gap_x
+        self.gap_y = gap_y
+        self.edge_margin_x = (
+            edge_margin_x
+        )
+        self.edge_margin_y = (
+            edge_margin_y
+        )
+
         self.placer = (
             ExtremePointPlacer(
                 pallet_length=pallet_length,
@@ -147,10 +156,336 @@ class OrderedSweepPlanner:
                     candidate.items
                 )
 
+        optimized = (
+            self._second_pass_optimize(
+                placed
+            )
+        )
+
         return OrderedSweepState(
-            placed=placed,
+            placed=optimized,
             remaining=remaining,
         )
+
+    def _second_pass_optimize(
+        self,
+        placed: List[PlacedStack],
+    ) -> List[PlacedStack]:
+        """
+        Pass 2:
+          - keep the exact stack order produced by Pass 1
+          - re-place those columns into the best available empty pockets
+          - center the finished footprint inside the usable pallet area
+
+        SKU execution order therefore remains:
+            20L -> 10L -> 1L -> 4L
+        """
+
+        if not placed:
+            return placed
+
+        repacked: List[
+            PlacedStack
+        ] = []
+
+        for original in placed:
+
+            options = (
+                self.placer.feasible_placements(
+                    candidate=original.candidate,
+                    placed=repacked,
+                )
+            )
+
+            if not options:
+                # Pass 1 already proved the layout fits.
+                # If optimization ever cannot reproduce it,
+                # keep the known-good original layout.
+                return self._center_layout(
+                    placed
+                )
+
+            chosen = min(
+                options,
+                key=lambda option:
+                self._gap_fill_key(
+                    option,
+                    repacked,
+                ),
+            )
+
+            repacked.append(
+                chosen
+            )
+
+        return self._center_layout(
+            repacked
+        )
+
+    def _gap_fill_key(
+        self,
+        option: PlacedStack,
+        placed: List[PlacedStack],
+    ):
+        """
+        Prefer placements that use existing empty pockets before
+        expanding the occupied pallet footprint.
+
+        Lower tuple is better.
+        """
+
+        trial = (
+            placed
+            + [option]
+        )
+
+        min_x = min(
+            stack.x
+            for stack in trial
+        )
+        min_y = min(
+            stack.y
+            for stack in trial
+        )
+        max_x = max(
+            stack.right
+            for stack in trial
+        )
+        max_y = max(
+            stack.top
+            for stack in trial
+        )
+
+        span_x = (
+            max_x - min_x
+        )
+        span_y = (
+            max_y - min_y
+        )
+
+        bounding_area = (
+            span_x * span_y
+        )
+
+        used_area = sum(
+            stack.length
+            * stack.width
+            for stack in trial
+        )
+
+        hole_area = max(
+            0.0,
+            bounding_area
+            - used_area,
+        )
+
+        previous_area = 0.0
+
+        if placed:
+
+            prev_min_x = min(
+                stack.x
+                for stack in placed
+            )
+            prev_min_y = min(
+                stack.y
+                for stack in placed
+            )
+            prev_max_x = max(
+                stack.right
+                for stack in placed
+            )
+            prev_max_y = max(
+                stack.top
+                for stack in placed
+            )
+
+            previous_area = (
+                (
+                    prev_max_x
+                    - prev_min_x
+                )
+                *
+                (
+                    prev_max_y
+                    - prev_min_y
+                )
+            )
+
+        expansion = max(
+            0.0,
+            bounding_area
+            - previous_area,
+        )
+
+        center_x = (
+            min_x
+            + span_x / 2.0
+        )
+        center_y = (
+            min_y
+            + span_y / 2.0
+        )
+
+        target_x = (
+            self.pallet_length
+            / 2.0
+        )
+        target_y = (
+            self.pallet_width
+            / 2.0
+        )
+
+        center_offset_sq = (
+            (
+                center_x
+                - target_x
+            ) ** 2
+            +
+            (
+                center_y
+                - target_y
+            ) ** 2
+        )
+
+        return (
+            round(
+                expansion,
+                6,
+            ),
+            round(
+                hole_area,
+                6,
+            ),
+            round(
+                bounding_area,
+                6,
+            ),
+            round(
+                center_offset_sq,
+                6,
+            ),
+            round(
+                option.y,
+                6,
+            ),
+            round(
+                option.x,
+                6,
+            ),
+        )
+
+    def _center_layout(
+        self,
+        placed: List[PlacedStack],
+    ) -> List[PlacedStack]:
+        """
+        Translate the whole finished layout so unused edge space is
+        shared on both sides. Relative geometry and all gaps remain
+        unchanged.
+        """
+
+        if not placed:
+            return placed
+
+        min_x = min(
+            stack.x
+            for stack in placed
+        )
+        min_y = min(
+            stack.y
+            for stack in placed
+        )
+        max_x = max(
+            stack.right
+            for stack in placed
+        )
+        max_y = max(
+            stack.top
+            for stack in placed
+        )
+
+        span_x = (
+            max_x - min_x
+        )
+        span_y = (
+            max_y - min_y
+        )
+
+        usable_length = max(
+            0.0,
+            self.pallet_length
+            - 2.0
+            * self.edge_margin_x,
+        )
+        usable_width = max(
+            0.0,
+            self.pallet_width
+            - 2.0
+            * self.edge_margin_y,
+        )
+
+        target_min_x = (
+            self.edge_margin_x
+            + max(
+                0.0,
+                (
+                    usable_length
+                    - span_x
+                )
+                / 2.0,
+            )
+        )
+
+        target_min_y = (
+            self.edge_margin_y
+            + max(
+                0.0,
+                (
+                    usable_width
+                    - span_y
+                )
+                / 2.0,
+            )
+        )
+
+        dx = (
+            target_min_x
+            - min_x
+        )
+        dy = (
+            target_min_y
+            - min_y
+        )
+
+        centered = []
+
+        for stack in placed:
+
+            centered.append(
+                PlacedStack(
+                    candidate=(
+                        stack.candidate
+                    ),
+                    x=(
+                        stack.x + dx
+                    ),
+                    y=(
+                        stack.y + dy
+                    ),
+                    length=(
+                        stack.length
+                    ),
+                    width=(
+                        stack.width
+                    ),
+                    rotation=(
+                        stack.rotation
+                    ),
+                )
+            )
+
+        return centered
 
     def _build_sku_columns(
         self,
