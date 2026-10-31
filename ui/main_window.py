@@ -36,7 +36,11 @@ from planner.rules import can_stack
 from robot.abb_client import ABBClient
 
 from planner.new_planner import NewPalletPlanner
-from planner.free_space import FreeRect, calculate_free_rectangles
+from planner.free_space import (
+    FreeRect,
+    calculate_free_rectangles,
+    fitting_skus,
+)
 from ui.pallet_view import Pallet3DView
 from execution.pallet_executor import PalletExecutor
 
@@ -998,13 +1002,27 @@ class MainWindow(QMainWindow):
 
             largest = pockets[0]
 
+            largest_fits = fitting_skus(
+                pocket=largest,
+                products=PRODUCTS,
+                gap_x=gap_x,
+                gap_y=gap_y,
+            )
+
+            fit_text = (
+                ", ".join(largest_fits)
+                if largest_fits
+                else "none"
+            )
+
             self.free_space_label.setText(
                 f"Free Pockets: {len(pockets)} | "
                 f"Free Area: {free_area:,.0f} mm² "
                 f"({free_percent:.1f}%) | "
                 f"Largest: "
                 f"{largest.width:.0f}×"
-                f"{largest.height:.0f} mm"
+                f"{largest.height:.0f} mm | "
+                f"Fits: {fit_text}"
             )
 
         else:
@@ -1021,13 +1039,27 @@ class MainWindow(QMainWindow):
             start=1,
         ):
 
+            fits = fitting_skus(
+                pocket=pocket,
+                products=PRODUCTS,
+                gap_x=gap_x,
+                gap_y=gap_y,
+            )
+
+            fit_text = (
+                ", ".join(fits)
+                if fits
+                else "none"
+            )
+
             print(
                 f"{index}: "
                 f"X={pocket.x:.0f} "
                 f"Y={pocket.y:.0f} "
                 f"W={pocket.width:.0f} "
                 f"H={pocket.height:.0f} "
-                f"Area={pocket.area:,.0f}"
+                f"Area={pocket.area:,.0f} "
+                f"Fits=[{fit_text}]"
             )
 
     # ========================================================
