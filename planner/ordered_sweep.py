@@ -172,221 +172,240 @@ class OrderedSweepPlanner:
         placed: List[PlacedStack],
     ) -> List[PlacedStack]:
         """
-        Pass 2:
-          - keep the exact stack order produced by Pass 1
-          - re-place those columns into the best available empty pockets
-          - center the finished footprint inside the usable pallet area
+        Pass 2 performs local relocation.
 
-        SKU execution order therefore remains:
-            20L -> 10L -> 1L -> 4L
+        Stack composition and list order never change, so execution
+        remains 20L -> 10L -> 1L -> 4L.
+
+        A move is accepted only when it improves the floor-layout
+        objective:
+          - better spread across pallet quadrants
+          - center of footprint nearer pallet center
+          - more balanced occupied extent in X and Y
         """
 
-        if not placed:
+        if len(placed) <= 1:
             return placed
 
-        repacked: List[
-            PlacedStack
-        ] = []
-
-        for original in placed:
-
-            options = (
-                self.placer.feasible_placements(
-                    candidate=original.candidate,
-                    placed=repacked,
-                )
+        current = list(placed)
+        current_score = (
+            self._layout_balance_score(
+                current
             )
-
-            if not options:
-                # Pass 1 already proved the layout fits.
-                # If optimization ever cannot reproduce it,
-                # keep the known-good original layout.
-                return self._center_layout(
-                    placed
-                )
-
-            chosen = min(
-                options,
-                key=lambda option:
-                self._gap_fill_key(
-                    option,
-                    repacked,
-                ),
-            )
-
-            repacked.append(
-                chosen
-            )
-
-        return self._center_layout(
-            repacked
         )
 
-    def _gap_fill_key(
+        # A few deterministic improvement sweeps are enough here.
+        for _ in range(4):
+
+            improved = False
+
+            for index in range(
+                len(current)
+            ):
+
+                moving = current[index]
+
+                fixed = [
+                    stack
+                    for position, stack
+                    in enumerate(current)
+                    if position != index
+                ]
+
+                options = (
+                    self.placer.feasible_placements(
+                        candidate=(
+                            moving.candidate
+                        ),
+                        placed=fixed,
+                    )
+                )
+
+                # Always include the current location as a valid
+                # candidate so the optimizer never makes things worse.
+                options.append(
+                    moving
+                )
+
+                best_stack = moving
+                best_score = (
+                    current_score
+                )
+
+                for option in options:
+
+                    trial = list(current)
+                    trial[index] = option
+
+                    score = (
+                        self._layout_balance_score(
+                            trial
+                        )
+                    )
+
+                    if score < best_score:
+                        best_score = score
+                        best_stack = option
+
+                if best_stack is not moving:
+                    current[index] = (
+                        best_stack
+                    )
+                    current_score = (
+                        best_score
+                    )
+                    improved = True
+
+            if not improved:
+                break
+
+        return current
+
+    def _layout_balance_score(
         self,
-        option: PlacedStack,
         placed: List[PlacedStack],
     ):
         """
-        Prefer placements that use existing empty pockets before
-        expanding the occupied pallet footprint.
+        Lower is better.
 
-        Lower tuple is better.
+        The first term measures how unevenly floor area is distributed
+        between the four pallet quadrants. This prevents one-side
+        clustering.
+
+        The remaining terms keep the occupied footprint centered and
+        reasonably well spread without forcing every stack into the
+        middle.
         """
 
-        trial = (
-            placed
-            + [option]
-        )
-
-        min_x = min(
-            stack.x
-            for stack in trial
-        )
-        min_y = min(
-            stack.y
-            for stack in trial
-        )
-        max_x = max(
-            stack.right
-            for stack in trial
-        )
-        max_y = max(
-            stack.top
-            for stack in trial
-        )
-
-        span_x = (
-            max_x - min_x
-        )
-        span_y = (
-            max_y - min_y
-        )
-
-        bounding_area = (
-            span_x * span_y
-        )
-
-        used_area = sum(
-            stack.length
-            * stack.width
-            for stack in trial
-        )
-
-        hole_area = max(
-            0.0,
-            bounding_area
-            - used_area,
-        )
-
-        previous_area = 0.0
-
-        if placed:
-
-            prev_min_x = min(
-                stack.x
-                for stack in placed
+        if not placed:
+            return (
+                0.0,
+                0.0,
+                0.0,
             )
-            prev_min_y = min(
-                stack.y
-                for stack in placed
-            )
-            prev_max_x = max(
-                stack.right
-                for stack in placed
-            )
-            prev_max_y = max(
-                stack.top
-                for stack in placed
-            )
-
-            previous_area = (
-                (
-                    prev_max_x
-                    - prev_min_x
-                )
-                *
-                (
-                    prev_max_y
-                    - prev_min_y
-                )
-            )
-
-        expansion = max(
-            0.0,
-            bounding_area
-            - previous_area,
-        )
 
         center_x = (
-            min_x
-            + span_x / 2.0
-        )
-        center_y = (
-            min_y
-            + span_y / 2.0
-        )
-
-        target_x = (
             self.pallet_length
             / 2.0
         )
-        target_y = (
+        center_y = (
             self.pallet_width
             / 2.0
         )
 
-        center_offset_sq = (
-            (
-                center_x
-                - target_x
-            ) ** 2
-            +
-            (
-                center_y
-                - target_y
-            ) ** 2
+        quadrant_areas = [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+        ]
+
+        for stack in placed:
+
+            rectangles = (
+                (
+                    self.edge_margin_x,
+                    self.edge_margin_y,
+                    center_x,
+                    center_y,
+                ),
+                (
+                    center_x,
+                    self.edge_margin_y,
+                    (
+                        self.pallet_length
+                        - self.edge_margin_x
+                    ),
+                    center_y,
+                ),
+                (
+                    self.edge_margin_x,
+                    center_y,
+                    center_x,
+                    (
+                        self.pallet_width
+                        - self.edge_margin_y
+                    ),
+                ),
+                (
+                    center_x,
+                    center_y,
+                    (
+                        self.pallet_length
+                        - self.edge_margin_x
+                    ),
+                    (
+                        self.pallet_width
+                        - self.edge_margin_y
+                    ),
+                ),
+            )
+
+            for quadrant_index, (
+                qx0,
+                qy0,
+                qx1,
+                qy1,
+            ) in enumerate(
+                rectangles
+            ):
+
+                overlap_x = max(
+                    0.0,
+                    min(
+                        stack.right,
+                        qx1,
+                    )
+                    - max(
+                        stack.x,
+                        qx0,
+                    ),
+                )
+
+                overlap_y = max(
+                    0.0,
+                    min(
+                        stack.top,
+                        qy1,
+                    )
+                    - max(
+                        stack.y,
+                        qy0,
+                    ),
+                )
+
+                quadrant_areas[
+                    quadrant_index
+                ] += (
+                    overlap_x
+                    * overlap_y
+                )
+
+        total_area = sum(
+            quadrant_areas
         )
 
-        return (
-            round(
-                expansion,
-                6,
-            ),
-            round(
-                hole_area,
-                6,
-            ),
-            round(
-                bounding_area,
-                6,
-            ),
-            round(
-                center_offset_sq,
-                6,
-            ),
-            round(
-                option.y,
-                6,
-            ),
-            round(
-                option.x,
-                6,
-            ),
-        )
+        if total_area > 0:
 
-    def _center_layout(
-        self,
-        placed: List[PlacedStack],
-    ) -> List[PlacedStack]:
-        """
-        Translate the whole finished layout so unused edge space is
-        shared on both sides. Relative geometry and all gaps remain
-        unchanged.
-        """
+            target_area = (
+                total_area / 4.0
+            )
 
-        if not placed:
-            return placed
+            quadrant_variance = (
+                sum(
+                    (
+                        (
+                            area
+                            - target_area
+                        )
+                        / total_area
+                    ) ** 2
+                    for area in quadrant_areas
+                )
+            )
+
+        else:
+            quadrant_variance = 0.0
 
         min_x = min(
             stack.x
@@ -405,6 +424,34 @@ class OrderedSweepPlanner:
             for stack in placed
         )
 
+        occupied_center_x = (
+            min_x
+            + max_x
+        ) / 2.0
+
+        occupied_center_y = (
+            min_y
+            + max_y
+        ) / 2.0
+
+        center_offset = (
+            (
+                (
+                    occupied_center_x
+                    - center_x
+                )
+                / self.pallet_length
+            ) ** 2
+            +
+            (
+                (
+                    occupied_center_y
+                    - center_y
+                )
+                / self.pallet_width
+            ) ** 2
+        )
+
         span_x = (
             max_x - min_x
         )
@@ -412,80 +459,59 @@ class OrderedSweepPlanner:
             max_y - min_y
         )
 
-        usable_length = max(
-            0.0,
+        usable_x = max(
+            1.0,
             self.pallet_length
             - 2.0
             * self.edge_margin_x,
         )
-        usable_width = max(
-            0.0,
+
+        usable_y = max(
+            1.0,
             self.pallet_width
             - 2.0
             * self.edge_margin_y,
         )
 
-        target_min_x = (
-            self.edge_margin_x
-            + max(
-                0.0,
-                (
-                    usable_length
-                    - span_x
+        spread_x = (
+            span_x / usable_x
+        )
+        spread_y = (
+            span_y / usable_y
+        )
+
+        spread_underuse = (
+            (
+                1.0
+                - min(
+                    spread_x,
+                    1.0,
                 )
-                / 2.0,
-            )
-        )
-
-        target_min_y = (
-            self.edge_margin_y
-            + max(
-                0.0,
-                (
-                    usable_width
-                    - span_y
+            ) ** 2
+            +
+            (
+                1.0
+                - min(
+                    spread_y,
+                    1.0,
                 )
-                / 2.0,
-            )
+            ) ** 2
         )
 
-        dx = (
-            target_min_x
-            - min_x
+        return (
+            round(
+                quadrant_variance,
+                8,
+            ),
+            round(
+                center_offset,
+                8,
+            ),
+            round(
+                spread_underuse,
+                8,
+            ),
         )
-        dy = (
-            target_min_y
-            - min_y
-        )
-
-        centered = []
-
-        for stack in placed:
-
-            centered.append(
-                PlacedStack(
-                    candidate=(
-                        stack.candidate
-                    ),
-                    x=(
-                        stack.x + dx
-                    ),
-                    y=(
-                        stack.y + dy
-                    ),
-                    length=(
-                        stack.length
-                    ),
-                    width=(
-                        stack.width
-                    ),
-                    rotation=(
-                        stack.rotation
-                    ),
-                )
-            )
-
-        return centered
 
     def _build_sku_columns(
         self,
