@@ -142,6 +142,14 @@ class NewPalletPlanner:
                 ),
             )
 
+        self._center_placed_footprint(
+            placed=state.placed,
+            pallet_length=effective_length,
+            pallet_width=effective_width,
+            edge_margin_x=edge_margin_x,
+            edge_margin_y=edge_margin_y,
+        )
+
         slots = self._placed_to_slots(
             state.placed,
             coordinate_offset=overhang,
@@ -151,6 +159,79 @@ class NewPalletPlanner:
             success=True,
             slots=slots,
         )
+
+    @staticmethod
+    def _center_placed_footprint(
+        placed,
+        pallet_length: float,
+        pallet_width: float,
+        edge_margin_x: float,
+        edge_margin_y: float,
+    ) -> None:
+        """
+        Translate the completed layout so its XY footprint is centered
+        inside the usable pallet area.
+
+        Relative stack positions, gaps, rotations, execution order, and
+        packing feasibility are unchanged.
+        """
+        if not placed:
+            return
+
+        min_x = min(
+            stack.x
+            for stack in placed
+        )
+        min_y = min(
+            stack.y
+            for stack in placed
+        )
+        max_x = max(
+            stack.right
+            for stack in placed
+        )
+        max_y = max(
+            stack.top
+            for stack in placed
+        )
+
+        footprint_center_x = (
+            min_x + max_x
+        ) / 2.0
+
+        footprint_center_y = (
+            min_y + max_y
+        ) / 2.0
+
+        usable_center_x = (
+            edge_margin_x
+            + (
+                pallet_length
+                - 2.0 * edge_margin_x
+            ) / 2.0
+        )
+
+        usable_center_y = (
+            edge_margin_y
+            + (
+                pallet_width
+                - 2.0 * edge_margin_y
+            ) / 2.0
+        )
+
+        shift_x = (
+            usable_center_x
+            - footprint_center_x
+        )
+
+        shift_y = (
+            usable_center_y
+            - footprint_center_y
+        )
+
+        for stack in placed:
+            stack.x += shift_x
+            stack.y += shift_y
 
     @staticmethod
     def _single_sku_capacity(
