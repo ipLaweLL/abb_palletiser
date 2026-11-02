@@ -8,6 +8,9 @@ from planner.free_space import (
     FreeRect,
     calculate_free_rectangles,
 )
+from planner.lookahead_area_fit import (
+    LookaheadAreaFitPlanner,
+)
 from planner.ordered_sweep import OrderedSweepPlanner
 
 
@@ -290,6 +293,16 @@ def run_one(
         edge_margin_y=EDGE_MARGIN_Y,
     )
 
+    lookahead = LookaheadAreaFitPlanner(
+        pallet_length=PALLET_LENGTH,
+        pallet_width=PALLET_WIDTH,
+        max_height=MAX_HEIGHT,
+        gap_x=GAP_X,
+        gap_y=GAP_Y,
+        edge_margin_x=EDGE_MARGIN_X,
+        edge_margin_y=EDGE_MARGIN_Y,
+    )
+
     corner_result = (
         corner.search(
             quantities
@@ -298,6 +311,12 @@ def run_one(
 
     baf_result = (
         baf.search(
+            quantities
+        )
+    )
+
+    lookahead_result = (
+        lookahead.search(
             quantities
         )
     )
@@ -312,9 +331,15 @@ def run_one(
         baf_result.remaining,
     )
 
+    lookahead_metrics = evaluate(
+        lookahead_result.placed,
+        lookahead_result.remaining,
+    )
+
     return (
         corner_metrics,
         baf_metrics,
+        lookahead_metrics,
     )
 
 
@@ -322,12 +347,15 @@ def main() -> None:
 
     corner_success = 0
     baf_success = 0
+    lookahead_success = 0
 
     corner_cog: List[float] = []
     baf_cog: List[float] = []
+    lookahead_cog: List[float] = []
 
     corner_free: List[float] = []
     baf_free: List[float] = []
+    lookahead_free: List[float] = []
 
     for order in DELIVERY_ORDERS:
 
@@ -349,6 +377,7 @@ def main() -> None:
         (
             corner_metrics,
             baf_metrics,
+            lookahead_metrics,
         ) = run_one(order)
 
         print(
@@ -362,6 +391,13 @@ def main() -> None:
             format_metrics(
                 "Best Area Fit",
                 baf_metrics,
+            )
+        )
+
+        print(
+            format_metrics(
+                "Lookahead Fit",
+                lookahead_metrics,
             )
         )
 
@@ -381,6 +417,15 @@ def main() -> None:
             )
             baf_free.append(
                 baf_metrics.free_percent
+            )
+
+        if lookahead_metrics.success:
+            lookahead_success += 1
+            lookahead_cog.append(
+                lookahead_metrics.cog_distance
+            )
+            lookahead_free.append(
+                lookahead_metrics.free_percent
             )
 
     print()
@@ -408,6 +453,18 @@ def main() -> None:
         if baf_free
         else float("nan")
     )
+    lookahead_avg_cog = (
+        sum(lookahead_cog)
+        / len(lookahead_cog)
+        if lookahead_cog
+        else float("nan")
+    )
+    lookahead_avg_free = (
+        sum(lookahead_free)
+        / len(lookahead_free)
+        if lookahead_free
+        else float("nan")
+    )
 
     print(
         f"Corner Sweep  "
@@ -421,6 +478,13 @@ def main() -> None:
         f"success={baf_success}/{len(DELIVERY_ORDERS)}  "
         f"avg_CoG={baf_avg_cog:.1f} mm  "
         f"avg_free={baf_avg_free:.1f}%"
+    )
+
+    print(
+        f"Lookahead Fit  "
+        f"success={lookahead_success}/{len(DELIVERY_ORDERS)}  "
+        f"avg_CoG={lookahead_avg_cog:.1f} mm  "
+        f"avg_free={lookahead_avg_free:.1f}%"
     )
 
 
