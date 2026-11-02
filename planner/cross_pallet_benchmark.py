@@ -3,9 +3,7 @@ from math import hypot
 from typing import Dict, List, Tuple
 
 from config.deliveries import DELIVERY_ORDERS
-from planner.adaptive_frontier import AdaptiveFrontierPlanner
 from planner.adaptive_planner import AdaptivePlanner
-from planner.balanced_frontier import BalancedFrontierPlanner
 from planner.best_area_fit import BestAreaFitPlanner
 from planner.compact_lookahead import CompactLookaheadAreaFitPlanner
 from planner.free_space import FreeRect, calculate_free_rectangles
@@ -410,12 +408,6 @@ def build_planners(
         "Frontier Look": FrontierLookaheadPlanner(
             **common,
         ),
-        "Balanced Front": BalancedFrontierPlanner(
-            **common,
-        ),
-        "Adaptive Front": AdaptiveFrontierPlanner(
-            **common,
-        ),
     }
 
 
@@ -517,24 +509,6 @@ def run_pallet(
             "contact": [],
             "fill": [],
         },
-        "Balanced Front": {
-            "success": 0,
-            "cog": [],
-            "clusters": [],
-            "adjacency": [],
-            "neighbours": [],
-            "contact": [],
-            "fill": [],
-        },
-        "Adaptive Front": {
-            "success": 0,
-            "cog": [],
-            "clusters": [],
-            "adjacency": [],
-            "neighbours": [],
-            "contact": [],
-            "fill": [],
-        },
     }
 
     for order in DELIVERY_ORDERS:
@@ -609,8 +583,6 @@ def run_pallet(
         "Compact Look",
         "Adaptive Select",
         "Frontier Look",
-        "Balanced Front",
-        "Adaptive Front",
     ):
         values = summary[name]
         cogs = values["cog"]
