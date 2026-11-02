@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 
 from config.products import PRODUCTS
 from config.deliveries import DELIVERY_ORDERS
+from config.validation_cases import VALIDATION_ORDERS
 
 from planner.models import (
     PalletSlot,
@@ -270,6 +271,51 @@ class MainWindow(QMainWindow):
             0,
             1,
             3
+        )
+
+        # ----------------------------------------------------
+        # VISUAL VALIDATION CASES
+        # ----------------------------------------------------
+
+        self.validation_combo = QComboBox()
+
+        self.validation_combo.addItem(
+            "Select validation case...",
+            None,
+        )
+
+        for index, order in enumerate(
+            VALIDATION_ORDERS
+        ):
+            label = (
+                f"Test {order['line']:02d} | "
+                f"1L={order['1L']}  "
+                f"4L={order['4L']}  "
+                f"10L={order['10L']}  "
+                f"20L={order['20L']}"
+            )
+
+            self.validation_combo.addItem(
+                label,
+                index,
+            )
+
+        self.validation_combo.currentIndexChanged.connect(
+            self.load_validation_case
+        )
+
+        delivery_grid.addWidget(
+            QLabel("Visual Test Case"),
+            7,
+            0,
+        )
+
+        delivery_grid.addWidget(
+            self.validation_combo,
+            7,
+            1,
+            1,
+            3,
         )
 
         # ----------------------------------------------------
@@ -748,6 +794,45 @@ class MainWindow(QMainWindow):
             f"Delivery: "
             f"{order['delivery']} "
             f"(Row {order['line']})"
+        )
+
+        self._update_order_total()
+
+    # ========================================================
+    # LOAD VISUAL VALIDATION CASE
+    # ========================================================
+
+    def load_validation_case(
+        self
+    ) -> None:
+
+        index = (
+            self.validation_combo.currentData()
+        )
+
+        if index is None:
+            return
+
+        order = VALIDATION_ORDERS[index]
+
+        self.current_delivery = None
+
+        for sku in [
+            "1L",
+            "4L",
+            "10L",
+            "20L",
+        ]:
+            self.quantity_inputs[sku].setValue(
+                order.get(sku, 0)
+            )
+
+        self.delivery_status_label.setText(
+            f"Validation Test: {order['line']:02d}"
+        )
+
+        self.status_label.setText(
+            "Status: Validation case loaded"
         )
 
         self._update_order_total()
