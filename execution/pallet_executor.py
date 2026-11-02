@@ -65,6 +65,23 @@ class PalletExecutor:
 
         return reply
 
+    def place_next_simulated(
+        self,
+    ) -> str:
+
+        slot = self.current_slot()
+
+        if slot is None:
+            return "COMPLETE"
+
+        slot.status = "DONE"
+
+        self.current_index += 1
+
+        self._mark_next_active()
+
+        return "PLACED"
+
     def reset(
         self,
     ) -> None:
