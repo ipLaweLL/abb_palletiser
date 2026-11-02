@@ -2,7 +2,7 @@ from math import floor
 from typing import Dict, List
 
 from config.products import PRODUCTS
-from planner.adaptive_planner import AdaptivePlanner
+from planner.frontier_lookahead import FrontierLookaheadPlanner
 from planner.models import PalletSlot, PlannerResult
 
 
@@ -10,8 +10,9 @@ class NewPalletPlanner:
     """
     Application-facing planner adapter.
 
-    AdaptivePlanner generates and selects the best deterministic layout,
-    while this class preserves the PlannerResult/PalletSlot interface
+    FrontierLookaheadPlanner preserves the deterministic corner-grown
+    pattern while using lookahead to avoid future packing traps. This
+    class preserves the PlannerResult/PalletSlot interface
     used by the GUI and ABB execution path.
     """
 
@@ -107,7 +108,7 @@ class NewPalletPlanner:
                     ),
                 )
 
-        planner = AdaptivePlanner(
+        planner = FrontierLookaheadPlanner(
             pallet_length=effective_length,
             pallet_width=effective_width,
             max_height=max_height,
@@ -122,7 +123,7 @@ class NewPalletPlanner:
         )
 
         self.last_selected_planner = (
-            planner.selected_name
+            "Frontier Look"
         )
 
         if state.unplaced_count() != 0:
