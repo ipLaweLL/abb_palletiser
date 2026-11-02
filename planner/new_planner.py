@@ -2,15 +2,21 @@ from math import floor
 from typing import Dict, List
 
 from config.products import PRODUCTS
-from planner.ordered_sweep import OrderedSweepPlanner
+from planner.adaptive_planner import AdaptivePlanner
 from planner.models import PalletSlot, PlannerResult
 
 
 class NewPalletPlanner:
     """
-    Adapter that exposes the new beam-search planner through the same
-    PlannerResult/PalletSlot interface used by the GUI and executor.
+    Application-facing planner adapter.
+
+    AdaptivePlanner generates and selects the best deterministic layout,
+    while this class preserves the PlannerResult/PalletSlot interface
+    used by the GUI and ABB execution path.
     """
+
+    def __init__(self) -> None:
+        self.last_selected_planner = ""
 
     def generate(
         self,
@@ -101,7 +107,7 @@ class NewPalletPlanner:
                     ),
                 )
 
-        planner = OrderedSweepPlanner(
+        planner = AdaptivePlanner(
             pallet_length=effective_length,
             pallet_width=effective_width,
             max_height=max_height,
@@ -113,6 +119,10 @@ class NewPalletPlanner:
 
         state = planner.search(
             quantities=quantities,
+        )
+
+        self.last_selected_planner = (
+            planner.selected_name
         )
 
         if state.unplaced_count() != 0:
