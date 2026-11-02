@@ -702,6 +702,20 @@ class MainWindow(QMainWindow):
             )
         )
 
+        self.local_sim_button = (
+            QPushButton(
+                "Simulate Next"
+            )
+        )
+
+        self.local_sim_button.setEnabled(
+            False
+        )
+
+        self.local_sim_button.clicked.connect(
+            self.simulate_place_local
+        )
+
         self.simulate_button = (
             QPushButton(
                 "Place Next with ABB"
@@ -732,6 +746,10 @@ class MainWindow(QMainWindow):
 
         status_layout.addWidget(
             self.progress_label
+        )
+
+        status_layout.addWidget(
+            self.local_sim_button
         )
 
         status_layout.addWidget(
@@ -909,6 +927,7 @@ class MainWindow(QMainWindow):
 
             self.slots = []
 
+            self.local_sim_button.setEnabled(False)
             self.simulate_button.setEnabled(False)
 
             self.current_item_label.setText(
@@ -943,6 +962,7 @@ class MainWindow(QMainWindow):
             self.slots
         )
 
+        self.local_sim_button.setEnabled(True)
         self.simulate_button.setEnabled(True)
 
         self.status_label.setText(
@@ -952,6 +972,54 @@ class MainWindow(QMainWindow):
         self._update_free_space()
         self.update_status()
         self._refresh_views()
+
+    # ========================================================
+    # LOCAL SIMULATION (NO ABB COMMUNICATION)
+    # ========================================================
+    def simulate_place_local(self) -> None:
+
+        current = self.executor.current_slot()
+
+        if current is None:
+            return
+
+        self.executor.place_next_simulated()
+
+        if self.executor.is_complete():
+
+            self.status_label.setText(
+                "Status: SIMULATION COMPLETE"
+            )
+
+            self.current_item_label.setText(
+                "Current Item: -"
+            )
+
+            self.local_sim_button.setEnabled(
+                False
+            )
+
+            self.local_sim_button.setEnabled(
+                False
+            )
+
+            self.local_sim_button.setEnabled(
+                False
+            )
+
+            self.simulate_button.setEnabled(
+                False
+            )
+
+        else:
+
+            self.status_label.setText(
+                f"Status: Simulated slot {current.id} placed"
+            )
+
+        self.update_status()
+        self._refresh_views()
+
 
     # ========================================================
     # MARK NEXT ITEM ACTIVE
@@ -1232,6 +1300,10 @@ class MainWindow(QMainWindow):
         self.executor.reset()
 
         if self.slots:
+
+            self.local_sim_button.setEnabled(
+                True
+            )
 
             self.simulate_button.setEnabled(
                 True
