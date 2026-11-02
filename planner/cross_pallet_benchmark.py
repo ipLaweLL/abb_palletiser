@@ -38,6 +38,9 @@ class Metrics:
     largest_pocket_width: float
     largest_pocket_height: float
     max_height: float
+    cluster_count: int
+    adjacency_percent: float
+    bbox_fill_percent: float
 
 
 def quantities_from_order(order: Dict) -> Dict[str, int]:
@@ -82,6 +85,9 @@ def evaluate(
             largest_pocket_width=usable_width,
             largest_pocket_height=usable_height,
             max_height=0.0,
+            cluster_count=0,
+            adjacency_percent=0.0,
+            bbox_fill_percent=0.0,
         )
 
     total_weight = sum(
@@ -173,6 +179,23 @@ def evaluate(
         for stack in placed
     )
 
+    cluster_count, adjacency_percent = (
+        visual_connectivity_metrics(
+            placed
+        )
+    )
+
+    footprint_area = sum(
+        stack.length * stack.width
+        for stack in placed
+    )
+
+    bbox_fill_percent = (
+        footprint_area / bounding_area * 100.0
+        if bounding_area > 0.0
+        else 0.0
+    )
+
     return Metrics(
         success=success,
         unplaced=unplaced,
@@ -183,6 +206,118 @@ def evaluate(
         largest_pocket_width=largest.width,
         largest_pocket_height=largest.height,
         max_height=max_height,
+        cluster_count=cluster_count,
+        adjacency_percent=adjacency_percent,
+        bbox_fill_percent=bbox_fill_percent,
+    )
+
+
+def visual_connectivity_metrics(
+    placed,
+) -> Tuple[int, float]:
+    """
+    Treat two floor stacks as connected when they sit one configured
+    pallet gap apart and overlap on the perpendicular axis.
+
+    Returns:
+      - number of connected components / islands
+      - percentage of stacks having at least one adjacent neighbour
+    """
+    count = len(placed)
+
+    if count == 0:
+        return 0, 0.0
+
+    neighbours = {
+        index: set()
+        for index in range(count)
+    }
+
+    eps = 1e-6
+
+    for i in range(count):
+        a = placed[i]
+
+        for j in range(i + 1, count):
+            b = placed[j]
+
+            x_overlap = (
+                a.x < b.right - eps
+                and a.right > b.x + eps
+            )
+
+            y_overlap = (
+                a.y < b.top - eps
+                and a.top > b.y + eps
+            )
+
+            horizontal_gap = (
+                abs(
+                    a.right + GAP_X - b.x
+                ) <= eps
+                or
+                abs(
+                    b.right + GAP_X - a.x
+                ) <= eps
+            )
+
+            vertical_gap = (
+                abs(
+                    a.top + GAP_Y - b.y
+                ) <= eps
+                or
+                abs(
+                    b.top + GAP_Y - a.y
+                ) <= eps
+            )
+
+            connected = (
+                horizontal_gap
+                and y_overlap
+            ) or (
+                vertical_gap
+                and x_overlap
+            )
+
+            if connected:
+                neighbours[i].add(j)
+                neighbours[j].add(i)
+
+    visited = set()
+    cluster_count = 0
+
+    for start in range(count):
+        if start in visited:
+            continue
+
+        cluster_count += 1
+        stack = [start]
+
+        while stack:
+            current = stack.pop()
+
+            if current in visited:
+                continue
+
+            visited.add(current)
+            stack.extend(
+                neighbours[current]
+                - visited
+            )
+
+    adjacent_stacks = sum(
+        1
+        for index in range(count)
+        if neighbours[index]
+    )
+
+    adjacency_percent = (
+        adjacent_stacks / count * 100.0
+    )
+
+    return (
+        cluster_count,
+        adjacency_percent,
     )
 
 
@@ -249,7 +384,10 @@ def format_metrics(
         f"Largest="
         f"{metrics.largest_pocket_width:.0f}x"
         f"{metrics.largest_pocket_height:.0f}  "
-        f"MaxH={metrics.max_height:.0f}"
+        f"MaxH={metrics.max_height:.0f}  "
+        f"Clusters={metrics.cluster_count:<2} "
+        f"Adj={metrics.adjacency_percent:>5.1f}%  "
+        f"Fill={metrics.bbox_fill_percent:>5.1f}%"
     )
 
 
@@ -271,34 +409,58 @@ def run_pallet(
         "Corner Sweep": {
             "success": 0,
             "cog": [],
+            "clusters": [],
+            "adjacency": [],
+            "fill": [],
         },
         "Best Area Fit": {
             "success": 0,
             "cog": [],
+            "clusters": [],
+            "adjacency": [],
+            "fill": [],
         },
         "Lookahead Fit": {
             "success": 0,
             "cog": [],
+            "clusters": [],
+            "adjacency": [],
+            "fill": [],
         },
         "Compact Look": {
             "success": 0,
             "cog": [],
+            "clusters": [],
+            "adjacency": [],
+            "fill": [],
         },
         "Adaptive Select": {
             "success": 0,
             "cog": [],
+            "clusters": [],
+            "adjacency": [],
+            "fill": [],
         },
         "Frontier Look": {
             "success": 0,
             "cog": [],
+            "clusters": [],
+            "adjacency": [],
+            "fill": [],
         },
         "Balanced Front": {
             "success": 0,
             "cog": [],
+            "clusters": [],
+            "adjacency": [],
+            "fill": [],
         },
         "Adaptive Front": {
             "success": 0,
             "cog": [],
+            "clusters": [],
+            "adjacency": [],
+            "fill": [],
         },
     }
 
@@ -344,6 +506,15 @@ def run_pallet(
                 summary[name]["cog"].append(
                     metrics.cog_distance
                 )
+                summary[name]["clusters"].append(
+                    metrics.cluster_count
+                )
+                summary[name]["adjacency"].append(
+                    metrics.adjacency_percent
+                )
+                summary[name]["fill"].append(
+                    metrics.bbox_fill_percent
+                )
 
     print()
     print("-" * 110)
@@ -370,13 +541,41 @@ def run_pallet(
             else float("nan")
         )
 
+        clusters = values["clusters"]
+        adjacency = values["adjacency"]
+        fill = values["fill"]
+
+        avg_clusters = (
+            sum(clusters) / len(clusters)
+            if clusters
+            else float("nan")
+        )
+
+        avg_adjacency = (
+            sum(adjacency) / len(adjacency)
+            if adjacency
+            else float("nan")
+        )
+
+        avg_fill = (
+            sum(fill) / len(fill)
+            if fill
+            else float("nan")
+        )
+
         print(
             f"{name:<16} "
             f"success="
             f"{values['success']}/"
             f"{len(DELIVERY_ORDERS)}  "
             f"avg_CoG="
-            f"{avg_cog:.1f} mm"
+            f"{avg_cog:.1f} mm  "
+            f"avg_clusters="
+            f"{avg_clusters:.2f}  "
+            f"avg_adj="
+            f"{avg_adjacency:.1f}%  "
+            f"avg_fill="
+            f"{avg_fill:.1f}%"
         )
 
 
