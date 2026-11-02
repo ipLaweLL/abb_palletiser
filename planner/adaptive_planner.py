@@ -23,19 +23,18 @@ class AdaptivePlanner:
 
     Selection policy:
       1. Successful layouts always beat failed layouts.
-      2. A layout is "balanced" when its CoG is within 15% of the
-         smaller pallet dimension from pallet center.
-      3. If balanced successful layouts exist, choose the one with the
-         smallest occupied bounding box, then lower CoG.
-      4. If none are inside the balance limit, choose the successful
-         layout with the lowest CoG.
+      2. Find the successful layout with the best CoG.
+      3. Allow only layouts whose CoG is within 5% of the smaller
+         pallet dimension of that best CoG.
+      4. Among those near-best-balance layouts, choose the smallest
+         occupied bounding box, then lower CoG.
       5. If every planner fails, choose the layout with the fewest
          unplaced items, then lower CoG and smaller bounding box.
 
     This avoids forcing one scoring personality onto every pallet/order.
     """
 
-    BALANCE_LIMIT_RATIO = 0.15
+    COG_DEGRADATION_RATIO = 0.05
 
     def __init__(
         self,
@@ -95,48 +94,51 @@ class AdaptivePlanner:
         ]
 
         if successful:
-            balance_limit = (
-                self.BALANCE_LIMIT_RATIO
+            scored = [
+                (
+                    name,
+                    result,
+                    self._cog_distance(
+                        result.placed
+                    ),
+                    self._bounding_area(
+                        result.placed
+                    ),
+                )
+                for name, result in successful
+            ]
+
+            best_cog = min(
+                item[2]
+                for item in scored
+            )
+
+            allowed_cog_loss = (
+                self.COG_DEGRADATION_RATIO
                 * min(
                     self.pallet_length,
                     self.pallet_width,
                 )
             )
 
-            balanced = [
-                (name, result)
-                for name, result in successful
-                if self._cog_distance(
-                    result.placed
-                ) <= balance_limit
+            near_best_balance = [
+                item
+                for item in scored
+                if (
+                    item[2]
+                    <= best_cog
+                    + allowed_cog_loss
+                )
             ]
 
-            if balanced:
-                name, result = min(
-                    balanced,
-                    key=lambda item: (
-                        self._bounding_area(
-                            item[1].placed
-                        ),
-                        self._cog_distance(
-                            item[1].placed
-                        ),
-                        item[0],
-                    ),
-                )
-            else:
-                name, result = min(
-                    successful,
-                    key=lambda item: (
-                        self._cog_distance(
-                            item[1].placed
-                        ),
-                        self._bounding_area(
-                            item[1].placed
-                        ),
-                        item[0],
-                    ),
-                )
+            name, result, _, _ = min(
+                near_best_balance,
+                key=lambda item: (
+                    item[3],
+                    item[2],
+                    item[0],
+                ),
+            )
 
             self.selected_name = name
             return result
