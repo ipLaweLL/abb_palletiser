@@ -1,18 +1,20 @@
-from typing import Dict, List
+from typing import Dict
 
 from config.products import PRODUCTS
-from planner.extreme_points import PlacedStack
-from planner.free_space import FreeRect
+from planner.balanced_frontier import (
+    BalancedFrontierPlanner,
+)
 from planner.frontier_lookahead import (
     FrontierLookaheadPlanner,
 )
+from planner.lookahead_area_fit import (
+    LookaheadAreaFitPlanner,
+)
 
 
-class AdaptiveFrontierPlanner(
-    FrontierLookaheadPlanner
-):
+class AdaptiveFrontierPlanner:
     """
-    Frontier lookahead whose placement style adapts to packing pressure.
+    Pressure-aware planner selector.
 
     Pressure is estimated as:
         required stack-column footprint area
@@ -20,13 +22,14 @@ class AdaptiveFrontierPlanner(
 
     Modes:
       - ROOMY  : pressure < 0.55
-                 preserve row-major frontier aggressively
+                 use Frontier Lookahead for the cleanest corner-grown pattern
       - MEDIUM : pressure < 0.75
-                 preserve feasibility, then compact growth
+                 use Balanced Frontier for a cleaner balance/compactness tradeoff
       - TIGHT  : pressure >= 0.75
-                 prioritize future fit and compact space use
+                 use Lookahead Area Fit to maximize future feasibility
 
-    The planner never sacrifices future feasibility for appearance.
+    The application-facing interface stays the same: search() returns
+    a planner state with placed and remaining.
     """
 
     ROOMY_LIMIT = 0.55
@@ -42,7 +45,19 @@ class AdaptiveFrontierPlanner(
         edge_margin_x: float = 20.0,
         edge_margin_y: float = 20.0,
     ) -> None:
-        super().__init__(
+        self.pallet_length = pallet_length
+        self.pallet_width = pallet_width
+        self.max_height = max_height
+        self.gap_x = gap_x
+        self.gap_y = gap_y
+        self.edge_margin_x = edge_margin_x
+        self.edge_margin_y = edge_margin_y
+
+        self.pressure = 0.0
+        self.mode = "ROOMY"
+        self.selected_name = ""
+
+        common = dict(
             pallet_length=pallet_length,
             pallet_width=pallet_width,
             max_height=max_height,
@@ -52,27 +67,40 @@ class AdaptiveFrontierPlanner(
             edge_margin_y=edge_margin_y,
         )
 
-        self.pressure = 0.0
-        self.mode = "ROOMY"
+        self.frontier = FrontierLookaheadPlanner(
+            **common,
+        )
+        self.balanced = BalancedFrontierPlanner(
+            **common,
+        )
+        self.lookahead = LookaheadAreaFitPlanner(
+            **common,
+        )
 
     def search(
         self,
         quantities: Dict[str, int],
     ):
-        self.pressure = (
-            self._packing_pressure(
-                quantities
-            )
+        self.pressure = self._packing_pressure(
+            quantities
         )
 
         if self.pressure < self.ROOMY_LIMIT:
             self.mode = "ROOMY"
+            self.selected_name = "Frontier Look"
+            planner = self.frontier
+
         elif self.pressure < self.TIGHT_LIMIT:
             self.mode = "MEDIUM"
+            self.selected_name = "Balanced Front"
+            planner = self.balanced
+
         else:
             self.mode = "TIGHT"
+            self.selected_name = "Lookahead Fit"
+            planner = self.lookahead
 
-        return super().search(
+        return planner.search(
             quantities
         )
 
@@ -101,6 +129,8 @@ class AdaptiveFrontierPlanner(
 
         required_area = 0.0
 
+        # Use the same stack-column construction as the underlying
+        # planners so pressure reflects floor positions, not raw items.
         for sku in (
             "20L",
             "10L",
@@ -117,7 +147,7 @@ class AdaptiveFrontierPlanner(
                 ),
             )
 
-            for candidate in self._build_sku_columns(
+            for candidate in self.frontier._build_sku_columns(
                 sku=sku,
                 quantity=quantity,
             ):
@@ -132,86 +162,6 @@ class AdaptiveFrontierPlanner(
         return (
             required_area
             / usable_area
-        )
-
-    def _placement_key(
-        self,
-        option: PlacedStack,
-        pockets: List[FreeRect],
-        placed: List[PlacedStack],
-        remaining_after: Dict[str, int],
-    ):
-        trial = placed + [option]
-
-        future_unplaced = (
-            self._rollout_unplaced(
-                placed=trial,
-                remaining=remaining_after,
-            )
-        )
-
-        bbox_area = (
-            self._bounding_box_area(
-                trial
-            )
-        )
-
-        cog_distance = (
-            self._cog_distance(
-                trial
-            )
-        )
-
-        y = round(
-            option.y,
-            6,
-        )
-        x = round(
-            option.x,
-            6,
-        )
-        bbox = round(
-            bbox_area,
-            6,
-        )
-        cog = round(
-            cog_distance,
-            6,
-        )
-
-        common_tail = (
-            round(option.length, 6),
-            round(option.width, 6),
-            option.rotation,
-        )
-
-        if self.mode == "ROOMY":
-            return (
-                future_unplaced,
-                y,
-                x,
-                bbox,
-                cog,
-                *common_tail,
-            )
-
-        if self.mode == "MEDIUM":
-            return (
-                future_unplaced,
-                bbox,
-                y,
-                x,
-                cog,
-                *common_tail,
-            )
-
-        return (
-            future_unplaced,
-            bbox,
-            cog,
-            y,
-            x,
-            *common_tail,
         )
 
 
@@ -252,6 +202,8 @@ if __name__ == "__main__":
             f"{planner.pressure:.3f}",
             "| Mode:",
             planner.mode,
+            "| Selected:",
+            planner.selected_name,
         )
         print(
             "Remaining:",
