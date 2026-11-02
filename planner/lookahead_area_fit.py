@@ -62,6 +62,7 @@ class LookaheadAreaFitPlanner:
         gap_y: float = 20.0,
         edge_margin_x: float = 20.0,
         edge_margin_y: float = 20.0,
+        single_item_columns: bool = False,
     ) -> None:
         self.pallet_length = pallet_length
         self.pallet_width = pallet_width
@@ -70,6 +71,7 @@ class LookaheadAreaFitPlanner:
         self.gap_y = gap_y
         self.edge_margin_x = edge_margin_x
         self.edge_margin_y = edge_margin_y
+        self.single_item_columns = single_item_columns
 
         self.placer = ExtremePointPlacer(
             pallet_length=pallet_length,
@@ -355,12 +357,16 @@ class LookaheadAreaFitPlanner:
             / product.height
         )
 
-        max_items = max(
-            1,
-            min(
-                product.max_layers,
-                vertical_by_height,
-            ),
+        max_items = (
+            1
+            if self.single_item_columns
+            else max(
+                1,
+                min(
+                    product.max_layers,
+                    vertical_by_height,
+                ),
+            )
         )
 
         columns: List[
