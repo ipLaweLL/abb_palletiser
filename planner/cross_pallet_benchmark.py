@@ -3,6 +3,7 @@ from math import hypot
 from typing import Dict, List, Tuple
 
 from config.deliveries import DELIVERY_ORDERS
+from planner.adaptive_planner import AdaptivePlanner
 from planner.best_area_fit import BestAreaFitPlanner
 from planner.compact_lookahead import CompactLookaheadAreaFitPlanner
 from planner.free_space import FreeRect, calculate_free_rectangles
@@ -210,6 +211,9 @@ def build_planners(
         "Compact Look": CompactLookaheadAreaFitPlanner(
             **common,
         ),
+        "Adaptive Select": AdaptivePlanner(
+            **common,
+        ),
     }
 
 
@@ -265,6 +269,10 @@ def run_pallet(
             "cog": [],
         },
         "Compact Look": {
+            "success": 0,
+            "cog": [],
+        },
+        "Adaptive Select": {
             "success": 0,
             "cog": [],
         },
@@ -325,6 +333,7 @@ def run_pallet(
         "Best Area Fit",
         "Lookahead Fit",
         "Compact Look",
+        "Adaptive Select",
     ):
         values = summary[name]
         cogs = values["cog"]
