@@ -3,6 +3,7 @@ from math import hypot
 from typing import Dict, List, Tuple
 
 from config.deliveries import DELIVERY_ORDERS
+from planner.adaptive_frontier import AdaptiveFrontierPlanner
 from planner.adaptive_planner import AdaptivePlanner
 from planner.balanced_frontier import BalancedFrontierPlanner
 from planner.best_area_fit import BestAreaFitPlanner
@@ -222,6 +223,9 @@ def build_planners(
         "Balanced Front": BalancedFrontierPlanner(
             **common,
         ),
+        "Adaptive Front": AdaptiveFrontierPlanner(
+            **common,
+        ),
     }
 
 
@@ -292,6 +296,10 @@ def run_pallet(
             "success": 0,
             "cog": [],
         },
+        "Adaptive Front": {
+            "success": 0,
+            "cog": [],
+        },
     }
 
     for order in DELIVERY_ORDERS:
@@ -352,6 +360,7 @@ def run_pallet(
         "Adaptive Select",
         "Frontier Look",
         "Balanced Front",
+        "Adaptive Front",
     ):
         values = summary[name]
         cogs = values["cog"]
