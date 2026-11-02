@@ -110,6 +110,7 @@ class NewPalletPlanner:
 
         sparse_single_items = (
             total_items <= 8
+            and len(active_skus) == 1
         )
 
         planner = FrontierLookaheadPlanner(
@@ -169,15 +170,18 @@ class NewPalletPlanner:
                 ),
             )
 
-        spread_applied = self._spread_sparse_footprint(
-            placed=state.placed,
-            pallet_length=effective_length,
-            pallet_width=effective_width,
-            gap_x=gap_x,
-            gap_y=gap_y,
-            edge_margin_x=edge_margin_x,
-            edge_margin_y=edge_margin_y,
-        )
+        spread_applied = False
+
+        if len(active_skus) == 1:
+            spread_applied = self._spread_sparse_footprint(
+                placed=state.placed,
+                pallet_length=effective_length,
+                pallet_width=effective_width,
+                gap_x=gap_x,
+                gap_y=gap_y,
+                edge_margin_x=edge_margin_x,
+                edge_margin_y=edge_margin_y,
+            )
 
         if not spread_applied:
             self._center_placed_footprint(
