@@ -40,6 +40,8 @@ class Metrics:
     max_height: float
     cluster_count: int
     adjacency_percent: float
+    average_neighbours: float
+    contact_density_percent: float
     bbox_fill_percent: float
 
 
@@ -87,6 +89,8 @@ def evaluate(
             max_height=0.0,
             cluster_count=0,
             adjacency_percent=0.0,
+            average_neighbours=0.0,
+            contact_density_percent=0.0,
             bbox_fill_percent=0.0,
         )
 
@@ -179,10 +183,13 @@ def evaluate(
         for stack in placed
     )
 
-    cluster_count, adjacency_percent = (
-        visual_connectivity_metrics(
-            placed
-        )
+    (
+        cluster_count,
+        adjacency_percent,
+        average_neighbours,
+        contact_density_percent,
+    ) = visual_connectivity_metrics(
+        placed
     )
 
     footprint_area = sum(
@@ -208,25 +215,29 @@ def evaluate(
         max_height=max_height,
         cluster_count=cluster_count,
         adjacency_percent=adjacency_percent,
+        average_neighbours=average_neighbours,
+        contact_density_percent=contact_density_percent,
         bbox_fill_percent=bbox_fill_percent,
     )
 
 
 def visual_connectivity_metrics(
     placed,
-) -> Tuple[int, float]:
+) -> Tuple[int, float, float, float]:
     """
-    Treat two floor stacks as connected when they sit one configured
-    pallet gap apart and overlap on the perpendicular axis.
+    Connectivity/compactness metrics for the floor layout.
 
     Returns:
-      - number of connected components / islands
-      - percentage of stacks having at least one adjacent neighbour
+      - connected component count
+      - percentage of stacks with at least one neighbour
+      - average number of neighbouring stacks per stack
+      - percentage of total stack perimeter participating in
+        gap-separated side contact
     """
     count = len(placed)
 
     if count == 0:
-        return 0, 0.0
+        return 0, 0.0, 0.0, 0.0
 
     neighbours = {
         index: set()
@@ -234,6 +245,7 @@ def visual_connectivity_metrics(
     }
 
     eps = 1e-6
+    total_contact_length = 0.0
 
     for i in range(count):
         a = placed[i]
@@ -241,14 +253,16 @@ def visual_connectivity_metrics(
         for j in range(i + 1, count):
             b = placed[j]
 
-            x_overlap = (
-                a.x < b.right - eps
-                and a.right > b.x + eps
+            x_overlap_length = max(
+                0.0,
+                min(a.right, b.right)
+                - max(a.x, b.x),
             )
 
-            y_overlap = (
-                a.y < b.top - eps
-                and a.top > b.y + eps
+            y_overlap_length = max(
+                0.0,
+                min(a.top, b.top)
+                - max(a.y, b.y),
             )
 
             horizontal_gap = (
@@ -271,27 +285,40 @@ def visual_connectivity_metrics(
                 ) <= eps
             )
 
-            connected = (
-                horizontal_gap
-                and y_overlap
-            ) or (
-                vertical_gap
-                and x_overlap
-            )
+            contact_length = 0.0
 
-            if connected:
+            if (
+                horizontal_gap
+                and y_overlap_length > eps
+            ):
+                contact_length += (
+                    y_overlap_length
+                )
+
+            if (
+                vertical_gap
+                and x_overlap_length > eps
+            ):
+                contact_length += (
+                    x_overlap_length
+                )
+
+            if contact_length > eps:
                 neighbours[i].add(j)
                 neighbours[j].add(i)
+                total_contact_length += (
+                    contact_length
+                )
 
     visited = set()
     cluster_count = 0
 
-    for start in range(count):
-        if start in visited:
+    for start_index in range(count):
+        if start_index in visited:
             continue
 
         cluster_count += 1
-        stack = [start]
+        stack = [start_index]
 
         while stack:
             current = stack.pop()
@@ -315,11 +342,39 @@ def visual_connectivity_metrics(
         adjacent_stacks / count * 100.0
     )
 
+    total_degree = sum(
+        len(neighbours[index])
+        for index in range(count)
+    )
+
+    average_neighbours = (
+        total_degree / count
+    )
+
+    total_perimeter = sum(
+        2.0 * (
+            stack.length
+            + stack.width
+        )
+        for stack in placed
+    )
+
+    # A shared side contributes to two stack perimeters.
+    contact_density_percent = (
+        2.0
+        * total_contact_length
+        / total_perimeter
+        * 100.0
+        if total_perimeter > 0.0
+        else 0.0
+    )
+
     return (
         cluster_count,
         adjacency_percent,
+        average_neighbours,
+        contact_density_percent,
     )
-
 
 def build_planners(
     pallet_length: float,
@@ -387,6 +442,8 @@ def format_metrics(
         f"MaxH={metrics.max_height:.0f}  "
         f"Clusters={metrics.cluster_count:<2} "
         f"Adj={metrics.adjacency_percent:>5.1f}%  "
+        f"Nbr={metrics.average_neighbours:>4.2f}  "
+        f"Contact={metrics.contact_density_percent:>5.1f}%  "
         f"Fill={metrics.bbox_fill_percent:>5.1f}%"
     )
 
@@ -411,6 +468,8 @@ def run_pallet(
             "cog": [],
             "clusters": [],
             "adjacency": [],
+            "neighbours": [],
+            "contact": [],
             "fill": [],
         },
         "Best Area Fit": {
@@ -418,6 +477,8 @@ def run_pallet(
             "cog": [],
             "clusters": [],
             "adjacency": [],
+            "neighbours": [],
+            "contact": [],
             "fill": [],
         },
         "Lookahead Fit": {
@@ -425,6 +486,8 @@ def run_pallet(
             "cog": [],
             "clusters": [],
             "adjacency": [],
+            "neighbours": [],
+            "contact": [],
             "fill": [],
         },
         "Compact Look": {
@@ -432,6 +495,8 @@ def run_pallet(
             "cog": [],
             "clusters": [],
             "adjacency": [],
+            "neighbours": [],
+            "contact": [],
             "fill": [],
         },
         "Adaptive Select": {
@@ -439,6 +504,8 @@ def run_pallet(
             "cog": [],
             "clusters": [],
             "adjacency": [],
+            "neighbours": [],
+            "contact": [],
             "fill": [],
         },
         "Frontier Look": {
@@ -446,6 +513,8 @@ def run_pallet(
             "cog": [],
             "clusters": [],
             "adjacency": [],
+            "neighbours": [],
+            "contact": [],
             "fill": [],
         },
         "Balanced Front": {
@@ -453,6 +522,8 @@ def run_pallet(
             "cog": [],
             "clusters": [],
             "adjacency": [],
+            "neighbours": [],
+            "contact": [],
             "fill": [],
         },
         "Adaptive Front": {
@@ -460,6 +531,8 @@ def run_pallet(
             "cog": [],
             "clusters": [],
             "adjacency": [],
+            "neighbours": [],
+            "contact": [],
             "fill": [],
         },
     }
@@ -512,6 +585,12 @@ def run_pallet(
                 summary[name]["adjacency"].append(
                     metrics.adjacency_percent
                 )
+                summary[name]["neighbours"].append(
+                    metrics.average_neighbours
+                )
+                summary[name]["contact"].append(
+                    metrics.contact_density_percent
+                )
                 summary[name]["fill"].append(
                     metrics.bbox_fill_percent
                 )
@@ -543,6 +622,8 @@ def run_pallet(
 
         clusters = values["clusters"]
         adjacency = values["adjacency"]
+        neighbours = values["neighbours"]
+        contact = values["contact"]
         fill = values["fill"]
 
         avg_clusters = (
@@ -554,6 +635,18 @@ def run_pallet(
         avg_adjacency = (
             sum(adjacency) / len(adjacency)
             if adjacency
+            else float("nan")
+        )
+
+        avg_neighbours = (
+            sum(neighbours) / len(neighbours)
+            if neighbours
+            else float("nan")
+        )
+
+        avg_contact = (
+            sum(contact) / len(contact)
+            if contact
             else float("nan")
         )
 
@@ -574,6 +667,10 @@ def run_pallet(
             f"{avg_clusters:.2f}  "
             f"avg_adj="
             f"{avg_adjacency:.1f}%  "
+            f"avg_nbr="
+            f"{avg_neighbours:.2f}  "
+            f"avg_contact="
+            f"{avg_contact:.1f}%  "
             f"avg_fill="
             f"{avg_fill:.1f}%"
         )
