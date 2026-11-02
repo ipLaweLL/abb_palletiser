@@ -281,14 +281,48 @@ class NewPalletPlanner:
 
         proposed = []
 
-        ordered = sorted(
-            placed,
-            key=lambda stack: (
-                -stack.length * stack.width,
-                stack.y,
-                stack.x,
-            ),
-        )
+        # IMPORTANT:
+        # placed is already generated in strict execution-family order:
+        # 20L -> 10L -> 1L -> 4L.
+        # Preserve that order spatially as well. Do not re-sort by size.
+        ordered = list(placed)
+
+        # Build a deterministic row-major sweep from the same pallet
+        # corner used by the planner. Sparse spreading only increases
+        # the spacing between successive floor positions.
+        x_slots = []
+
+        if columns == 1:
+            x_slots = [
+                edge_margin_x
+            ]
+        else:
+            x_slots = [
+                edge_margin_x
+                + column
+                * (
+                    usable_length
+                    / (columns - 1)
+                )
+                for column in range(columns)
+            ]
+
+        y_slots = []
+
+        if rows == 1:
+            y_slots = [
+                edge_margin_y
+            ]
+        else:
+            y_slots = [
+                edge_margin_y
+                + row
+                * (
+                    usable_width
+                    / (rows - 1)
+                )
+                for row in range(rows)
+            ]
 
         for index, stack in enumerate(
             ordered
@@ -300,42 +334,20 @@ class NewPalletPlanner:
                 index % columns
             )
 
-            if (
-                stack.length
-                + gap_x
-                > cell_length
-                and columns > 1
-            ):
-                return False
-
-            if (
-                stack.width
-                + gap_y
-                > cell_width
-                and rows > 1
-            ):
-                return False
-
-            center_x = (
-                edge_margin_x
-                + (
-                    column + 0.5
-                ) * cell_length
+            # Anchor the first stack at the pallet corner, then sweep
+            # +X and continue in +Y. Shift later positions inward as
+            # needed so the entire stack remains inside the margins.
+            x = min(
+                x_slots[column],
+                pallet_length
+                - edge_margin_x
+                - stack.length,
             )
-            center_y = (
-                edge_margin_y
-                + (
-                    row + 0.5
-                ) * cell_width
-            )
-
-            x = (
-                center_x
-                - stack.length / 2.0
-            )
-            y = (
-                center_y
-                - stack.width / 2.0
+            y = min(
+                y_slots[row],
+                pallet_width
+                - edge_margin_y
+                - stack.width,
             )
 
             proposed.append(
