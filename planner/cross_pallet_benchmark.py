@@ -7,6 +7,7 @@ from planner.adaptive_planner import AdaptivePlanner
 from planner.best_area_fit import BestAreaFitPlanner
 from planner.compact_lookahead import CompactLookaheadAreaFitPlanner
 from planner.free_space import FreeRect, calculate_free_rectangles
+from planner.frontier_lookahead import FrontierLookaheadPlanner
 from planner.lookahead_area_fit import LookaheadAreaFitPlanner
 from planner.ordered_sweep import OrderedSweepPlanner
 
@@ -214,6 +215,9 @@ def build_planners(
         "Adaptive Select": AdaptivePlanner(
             **common,
         ),
+        "Frontier Look": FrontierLookaheadPlanner(
+            **common,
+        ),
     }
 
 
@@ -276,6 +280,10 @@ def run_pallet(
             "success": 0,
             "cog": [],
         },
+        "Frontier Look": {
+            "success": 0,
+            "cog": [],
+        },
     }
 
     for order in DELIVERY_ORDERS:
@@ -334,6 +342,7 @@ def run_pallet(
         "Lookahead Fit",
         "Compact Look",
         "Adaptive Select",
+        "Frontier Look",
     ):
         values = summary[name]
         cogs = values["cog"]
