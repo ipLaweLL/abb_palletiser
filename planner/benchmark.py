@@ -388,44 +388,39 @@ def main() -> None:
     print("OVERALL")
     print("=" * 100)
 
+    corner_avg_cog = (
+        sum(corner_cog) / len(corner_cog)
+        if corner_cog
+        else float("nan")
+    )
+    corner_avg_free = (
+        sum(corner_free) / len(corner_free)
+        if corner_free
+        else float("nan")
+    )
+    baf_avg_cog = (
+        sum(baf_cog) / len(baf_cog)
+        if baf_cog
+        else float("nan")
+    )
+    baf_avg_free = (
+        sum(baf_free) / len(baf_free)
+        if baf_free
+        else float("nan")
+    )
+
     print(
         f"Corner Sweep  "
-        f"success={corner_success}/"
-        f"{len(DELIVERY_ORDERS)}  "
-        f"avg_CoG="
-        f"{(
-            sum(corner_cog)
-            / len(corner_cog)
-            if corner_cog
-            else float('nan')
-        ):.1f} mm  "
-        f"avg_free="
-        f"{(
-            sum(corner_free)
-            / len(corner_free)
-            if corner_free
-            else float('nan')
-        ):.1f}%"
+        f"success={corner_success}/{len(DELIVERY_ORDERS)}  "
+        f"avg_CoG={corner_avg_cog:.1f} mm  "
+        f"avg_free={corner_avg_free:.1f}%"
     )
 
     print(
         f"Best Area Fit "
-        f"success={baf_success}/"
-        f"{len(DELIVERY_ORDERS)}  "
-        f"avg_CoG="
-        f"{(
-            sum(baf_cog)
-            / len(baf_cog)
-            if baf_cog
-            else float('nan')
-        ):.1f} mm  "
-        f"avg_free="
-        f"{(
-            sum(baf_free)
-            / len(baf_free)
-            if baf_free
-            else float('nan')
-        ):.1f}%"
+        f"success={baf_success}/{len(DELIVERY_ORDERS)}  "
+        f"avg_CoG={baf_avg_cog:.1f} mm  "
+        f"avg_free={baf_avg_free:.1f}%"
     )
 
 
