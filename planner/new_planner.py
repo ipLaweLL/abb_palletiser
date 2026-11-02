@@ -108,6 +108,10 @@ class NewPalletPlanner:
                     ),
                 )
 
+        sparse_single_items = (
+            total_items <= 8
+        )
+
         planner = FrontierLookaheadPlanner(
             pallet_length=effective_length,
             pallet_width=effective_width,
@@ -116,11 +120,34 @@ class NewPalletPlanner:
             gap_y=gap_y,
             edge_margin_x=edge_margin_x,
             edge_margin_y=edge_margin_y,
+            single_item_columns=sparse_single_items,
         )
 
         state = planner.search(
             quantities=quantities,
         )
+
+        # Sparse orders should prefer one item per floor position.
+        # If that cannot fit, fall back to normal vertical stacking
+        # rather than rejecting an otherwise feasible order.
+        if (
+            sparse_single_items
+            and state.unplaced_count() != 0
+        ):
+            planner = FrontierLookaheadPlanner(
+                pallet_length=effective_length,
+                pallet_width=effective_width,
+                max_height=max_height,
+                gap_x=gap_x,
+                gap_y=gap_y,
+                edge_margin_x=edge_margin_x,
+                edge_margin_y=edge_margin_y,
+                single_item_columns=False,
+            )
+
+            state = planner.search(
+                quantities=quantities,
+            )
 
         self.last_selected_planner = (
             "Frontier Look"
@@ -191,7 +218,7 @@ class NewPalletPlanner:
         """
         count = len(placed)
 
-        if count < 2 or count > 6:
+        if count < 2 or count > 8:
             return False
 
         usable_length = max(
