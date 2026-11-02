@@ -4,6 +4,7 @@ from typing import Dict, List, Tuple
 
 from config.deliveries import DELIVERY_ORDERS
 from planner.best_area_fit import BestAreaFitPlanner
+from planner.compact_lookahead import CompactLookaheadAreaFitPlanner
 from planner.free_space import FreeRect, calculate_free_rectangles
 from planner.lookahead_area_fit import LookaheadAreaFitPlanner
 from planner.ordered_sweep import OrderedSweepPlanner
@@ -206,6 +207,9 @@ def build_planners(
         "Lookahead Fit": LookaheadAreaFitPlanner(
             **common,
         ),
+        "Compact Look": CompactLookaheadAreaFitPlanner(
+            **common,
+        ),
     }
 
 
@@ -257,6 +261,10 @@ def run_pallet(
             "cog": [],
         },
         "Lookahead Fit": {
+            "success": 0,
+            "cog": [],
+        },
+        "Compact Look": {
             "success": 0,
             "cog": [],
         },
@@ -316,6 +324,7 @@ def run_pallet(
         "Corner Sweep",
         "Best Area Fit",
         "Lookahead Fit",
+        "Compact Look",
     ):
         values = summary[name]
         cogs = values["cog"]
