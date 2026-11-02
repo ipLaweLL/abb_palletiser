@@ -276,12 +276,29 @@ class NewPalletPlanner:
             count / columns
         )
 
-        cell_length = (
-            usable_length / columns
+        # Keep sparse stacks in separate floor positions, but form
+        # a compact group in the center instead of pushing them to
+        # the outer edges of the pallet.
+        max_length = max(stack.length for stack in placed)
+        max_width = max(stack.width for stack in placed)
+
+        group_length = (
+            columns * max_length
+            + (columns - 1) * gap_x
         )
-        cell_width = (
-            usable_width / rows
+        group_width = (
+            rows * max_width
+            + (rows - 1) * gap_y
         )
+
+        if (
+            group_length > usable_length + 1e-6
+            or group_width > usable_width + 1e-6
+        ):
+            return False
+
+        group_x = (pallet_length - group_length) / 2.0
+        group_y = (pallet_width - group_width) / 2.0
 
         proposed = []
 
@@ -291,42 +308,16 @@ class NewPalletPlanner:
         # Preserve that order spatially as well. Do not re-sort by size.
         ordered = list(placed)
 
-        # Build a deterministic row-major sweep from the same pallet
-        # corner used by the planner. Sparse spreading only increases
-        # the spacing between successive floor positions.
-        x_slots = []
-
-        if columns == 1:
-            x_slots = [
-                edge_margin_x
-            ]
-        else:
-            x_slots = [
-                edge_margin_x
-                + column
-                * (
-                    usable_length
-                    / (columns - 1)
-                )
-                for column in range(columns)
-            ]
-
-        y_slots = []
-
-        if rows == 1:
-            y_slots = [
-                edge_margin_y
-            ]
-        else:
-            y_slots = [
-                edge_margin_y
-                + row
-                * (
-                    usable_width
-                    / (rows - 1)
-                )
-                for row in range(rows)
-            ]
+        # Preserve row-major placement order (+X, then +Y).
+        # Grid positions are relative to the centered group.
+        x_slots = [
+            group_x + column * (max_length + gap_x)
+            for column in range(columns)
+        ]
+        y_slots = [
+            group_y + row * (max_width + gap_y)
+            for row in range(rows)
+        ]
 
         for index, stack in enumerate(
             ordered
@@ -338,21 +329,9 @@ class NewPalletPlanner:
                 index % columns
             )
 
-            # Anchor the first stack at the pallet corner, then sweep
-            # +X and continue in +Y. Shift later positions inward as
-            # needed so the entire stack remains inside the margins.
-            x = min(
-                x_slots[column],
-                pallet_length
-                - edge_margin_x
-                - stack.length,
-            )
-            y = min(
-                y_slots[row],
-                pallet_width
-                - edge_margin_y
-                - stack.width,
-            )
+            # Center each footprint within its grid cell.
+            x = x_slots[column] + (max_length - stack.length) / 2.0
+            y = y_slots[row] + (max_width - stack.width) / 2.0
 
             proposed.append(
                 (
