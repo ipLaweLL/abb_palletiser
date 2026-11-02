@@ -1,4 +1,4 @@
-from math import floor
+from math import ceil, floor, sqrt
 from typing import Dict, List
 
 from config.products import PRODUCTS
@@ -142,13 +142,24 @@ class NewPalletPlanner:
                 ),
             )
 
-        self._center_placed_footprint(
+        spread_applied = self._spread_sparse_footprint(
             placed=state.placed,
             pallet_length=effective_length,
             pallet_width=effective_width,
+            gap_x=gap_x,
+            gap_y=gap_y,
             edge_margin_x=edge_margin_x,
             edge_margin_y=edge_margin_y,
         )
+
+        if not spread_applied:
+            self._center_placed_footprint(
+                placed=state.placed,
+                pallet_length=effective_length,
+                pallet_width=effective_width,
+                edge_margin_x=edge_margin_x,
+                edge_margin_y=edge_margin_y,
+            )
 
         slots = self._placed_to_slots(
             state.placed,
@@ -159,6 +170,211 @@ class NewPalletPlanner:
             success=True,
             slots=slots,
         )
+
+    @staticmethod
+    def _spread_sparse_footprint(
+        placed,
+        pallet_length: float,
+        pallet_width: float,
+        gap_x: float,
+        gap_y: float,
+        edge_margin_x: float,
+        edge_margin_y: float,
+    ) -> bool:
+        """
+        Spread genuinely sparse floor stacks across the usable pallet area.
+
+        This is a post-process only: stack contents, rotations, heights,
+        and execution order remain unchanged. If a safe distributed grid
+        cannot be created, return False so normal footprint centering is
+        used instead.
+        """
+        count = len(placed)
+
+        if count < 2 or count > 6:
+            return False
+
+        usable_length = max(
+            0.0,
+            pallet_length
+            - 2.0 * edge_margin_x,
+        )
+        usable_width = max(
+            0.0,
+            pallet_width
+            - 2.0 * edge_margin_y,
+        )
+        usable_area = (
+            usable_length
+            * usable_width
+        )
+
+        if usable_area <= 0.0:
+            return False
+
+        footprint_area = sum(
+            stack.length * stack.width
+            for stack in placed
+        )
+
+        occupancy = (
+            footprint_area / usable_area
+        )
+
+        if occupancy >= 0.45:
+            return False
+
+        aspect = (
+            usable_length / usable_width
+            if usable_width > 0.0
+            else 1.0
+        )
+
+        columns = max(
+            1,
+            min(
+                count,
+                ceil(
+                    sqrt(
+                        count * aspect
+                    )
+                ),
+            ),
+        )
+        rows = ceil(
+            count / columns
+        )
+
+        cell_length = (
+            usable_length / columns
+        )
+        cell_width = (
+            usable_width / rows
+        )
+
+        proposed = []
+
+        ordered = sorted(
+            placed,
+            key=lambda stack: (
+                -stack.length * stack.width,
+                stack.y,
+                stack.x,
+            ),
+        )
+
+        for index, stack in enumerate(
+            ordered
+        ):
+            row = (
+                index // columns
+            )
+            column = (
+                index % columns
+            )
+
+            if (
+                stack.length
+                + gap_x
+                > cell_length
+                and columns > 1
+            ):
+                return False
+
+            if (
+                stack.width
+                + gap_y
+                > cell_width
+                and rows > 1
+            ):
+                return False
+
+            center_x = (
+                edge_margin_x
+                + (
+                    column + 0.5
+                ) * cell_length
+            )
+            center_y = (
+                edge_margin_y
+                + (
+                    row + 0.5
+                ) * cell_width
+            )
+
+            x = (
+                center_x
+                - stack.length / 2.0
+            )
+            y = (
+                center_y
+                - stack.width / 2.0
+            )
+
+            proposed.append(
+                (
+                    stack,
+                    x,
+                    y,
+                )
+            )
+
+        eps = 1e-6
+
+        for stack, x, y in proposed:
+            if (
+                x
+                < edge_margin_x - eps
+                or y
+                < edge_margin_y - eps
+                or x + stack.length
+                > pallet_length
+                - edge_margin_x + eps
+                or y + stack.width
+                > pallet_width
+                - edge_margin_y + eps
+            ):
+                return False
+
+        for i in range(
+            len(proposed)
+        ):
+            a, ax, ay = proposed[i]
+            ar = ax + a.length
+            at = ay + a.width
+
+            for j in range(
+                i + 1,
+                len(proposed),
+            ):
+                b, bx, by = proposed[j]
+                br = bx + b.length
+                bt = by + b.width
+
+                separated_x = (
+                    ar + gap_x
+                    <= bx + eps
+                    or br + gap_x
+                    <= ax + eps
+                )
+                separated_y = (
+                    at + gap_y
+                    <= by + eps
+                    or bt + gap_y
+                    <= ay + eps
+                )
+
+                if not (
+                    separated_x
+                    or separated_y
+                ):
+                    return False
+
+        for stack, x, y in proposed:
+            stack.x = x
+            stack.y = y
+
+        return True
 
     @staticmethod
     def _center_placed_footprint(
