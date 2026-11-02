@@ -67,6 +67,7 @@ class OrderedSweepPlanner:
         gap_y: float = 20.0,
         edge_margin_x: float = 20.0,
         edge_margin_y: float = 20.0,
+        enable_last_sku_relocation: bool = True,
     ) -> None:
 
         self.pallet_length = (
@@ -86,6 +87,9 @@ class OrderedSweepPlanner:
         )
         self.edge_margin_y = (
             edge_margin_y
+        )
+        self.enable_last_sku_relocation = (
+            enable_last_sku_relocation
         )
 
         self.placer = (
@@ -160,15 +164,14 @@ class OrderedSweepPlanner:
                     candidate.items
                 )
 
-        optimized = (
-            self._relocate_last_sku(
+        if self.enable_last_sku_relocation:
+            placed = self._relocate_last_sku(
                 placed=placed,
                 sku="4L",
             )
-        )
 
         return OrderedSweepState(
-            placed=optimized,
+            placed=placed,
             remaining=remaining,
         )
 
