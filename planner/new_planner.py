@@ -3,7 +3,7 @@ from typing import Dict, List
 
 from config.products import PRODUCTS
 from planner.frontier_lookahead import FrontierLookaheadPlanner
-from planner.models import PalletSlot, PlannerResult
+from planner.models import PalletSlot, PlannerResult, StackCandidate
 
 
 class NewPalletPlanner:
@@ -108,13 +108,8 @@ class NewPalletPlanner:
                     ),
                 )
 
-        # Prefer a complete floor layer before making vertical columns.
-        # This applies to both single-SKU and mixed-SKU orders.
-        #
-        # First try one item per floor position. If the frontier search
-        # cannot fit the entire order that way, retry using the original
-        # legal vertical columns. The existing SKU execution order is
-        # preserved by FrontierLookaheadPlanner in either attempt.
+        # Phase 1: Keep as many one-item floor positions as the
+        # lookahead search can find, preserving SKU execution priority.
         planner = FrontierLookaheadPlanner(
             pallet_length=effective_length,
             pallet_width=effective_width,
@@ -125,13 +120,28 @@ class NewPalletPlanner:
             edge_margin_y=edge_margin_y,
             single_item_columns=True,
         )
+        state = planner.search(quantities=quantities)
 
-        state = planner.search(
-            quantities=quantities,
-        )
+        # Search stops at the first SKU with no feasible floor
+        # position. Smaller, later SKUs may still fit, so finish the
+        # floor pass before allocating any upper layers.
+        self._complete_floor_pass(planner, state)
 
+        # Phase 2: Keep the floor positions and allocate any overflow
+        # onto compatible same-SKU columns, one level at a time.
         if state.unplaced_count() != 0:
-            planner = FrontierLookaheadPlanner(
+            self._add_upper_layers(
+                state=state,
+                pallet_length=effective_length,
+                pallet_width=effective_width,
+                max_height=max_height,
+            )
+
+        # Preserve the previous stack-based planner as a fallback for
+        # mixed orders that cannot be completed from the floor-first
+        # arrangement. Never return a partial successful pallet.
+        if state.unplaced_count() != 0:
+            fallback = FrontierLookaheadPlanner(
                 pallet_length=effective_length,
                 pallet_width=effective_width,
                 max_height=max_height,
@@ -141,10 +151,7 @@ class NewPalletPlanner:
                 edge_margin_y=edge_margin_y,
                 single_item_columns=False,
             )
-
-            state = planner.search(
-                quantities=quantities,
-            )
+            state = fallback.search(quantities=quantities)
 
         self.last_selected_planner = (
             "Frontier Look"
@@ -197,6 +204,99 @@ class NewPalletPlanner:
             success=True,
             slots=slots,
         )
+
+    @staticmethod
+    def _complete_floor_pass(planner, state) -> None:
+        """Continue with later SKUs if the first floor search stopped.
+
+        The original search may stop on an unplaceable large SKU even
+        when a smaller SKU could occupy the remaining floor space.
+        Preserve its existing placements and deterministic tie-breakers.
+        """
+        for sku in ("20L", "10L", "1L", "4L"):
+            while state.remaining.get(sku, 0) > 0:
+                product = PRODUCTS[sku]
+                candidate = StackCandidate(
+                    items=[sku],
+                    base_length=product.length,
+                    base_width=product.width,
+                    height=product.height,
+                    weight=product.weight,
+                )
+                options = planner.placer.feasible_placements(
+                    candidate=candidate,
+                    placed=state.placed,
+                )
+                if not options:
+                    break
+
+                after = dict(state.remaining)
+                after[sku] -= 1
+                pockets = planner._free_pockets(state.placed)
+                chosen = min(
+                    options,
+                    key=lambda option: planner._placement_key(
+                        option=option,
+                        pockets=pockets,
+                        placed=state.placed,
+                        remaining_after=after,
+                    ),
+                )
+                state.placed.append(chosen)
+                state.remaining = after
+
+    @staticmethod
+    def _add_upper_layers(
+        state,
+        pallet_length: float,
+        pallet_width: float,
+        max_height: float,
+    ) -> None:
+        """Add surplus to the shortest legal same-SKU columns.
+
+        This does not change XY positions, rotations, or the physical
+        support footprint. Slot conversion subsequently places all
+        first levels before upper levels within each SKU.
+        """
+        for sku in ("20L", "10L", "1L", "4L"):
+            product = PRODUCTS[sku]
+            slenderness = 4.0 if product.family == "carton" else 3.0
+
+            while state.remaining.get(sku, 0) > 0:
+                legal = [
+                    stack for stack in state.placed
+                    if (
+                        all(item == sku for item in stack.candidate.items)
+                        and len(stack.candidate.items) < product.max_layers
+                        and stack.candidate.height + product.height
+                        <= max_height + 1e-6
+                        and (
+                            (stack.candidate.height + product.height)
+                            / min(stack.length, stack.width)
+                        ) <= slenderness + 1e-6
+                    )
+                ]
+                if not legal:
+                    break
+
+                # Keep columns balanced in height; put the first
+                # upper-level item near the pallet center.
+                stack = min(
+                    legal,
+                    key=lambda item: (
+                        len(item.candidate.items),
+                        (
+                            (item.x + item.length / 2 - pallet_length / 2) ** 2
+                            + (item.y + item.width / 2 - pallet_width / 2) ** 2
+                        ),
+                        item.y,
+                        item.x,
+                    ),
+                )
+                stack.candidate.items.append(sku)
+                stack.candidate.height += product.height
+                stack.candidate.weight += product.weight
+                state.remaining[sku] -= 1
 
     @staticmethod
     def _spread_sparse_footprint(
