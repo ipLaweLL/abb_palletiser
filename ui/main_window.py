@@ -44,7 +44,6 @@ from planner.free_space import (
     fitting_skus,
 )
 from ui.pallet_view import Pallet3DView
-from ui.operator_window import OperatorWindow
 from execution.pallet_executor import PalletExecutor
 
 
@@ -78,7 +77,6 @@ class MainWindow(QMainWindow):
         )
 
         self.slots = []
-        self.operator_window = None
 
         self.current_delivery = None
 
@@ -613,14 +611,6 @@ class MainWindow(QMainWindow):
         button_layout.addWidget(
             self.reset_button
         )
-
-        self.operator_button = QPushButton(
-            "Open Operator Display"
-        )
-        self.operator_button.clicked.connect(
-            self.open_operator_display
-        )
-        button_layout.addWidget(self.operator_button)
 
         main_layout.addLayout(
             button_layout
@@ -1277,8 +1267,6 @@ class MainWindow(QMainWindow):
                 "Current Item: -"
             )
 
-        self.sync_operator_display()
-
     # ========================================================
     # REFRESH 3D VIEWS
     # ========================================================
@@ -1315,43 +1303,6 @@ class MainWindow(QMainWindow):
             width,
 
             True
-        )
-        self.sync_operator_display()
-
-    # ========================================================
-    # OPERATOR DISPLAY (READ-ONLY MIRROR)
-    # ========================================================
-
-    def open_operator_display(self) -> None:
-        if self.operator_window is None:
-            self.operator_window = OperatorWindow()
-        self.sync_operator_display()
-        self.operator_window.show()
-        self.operator_window.raise_()
-        self.operator_window.activateWindow()
-
-    def sync_operator_display(self) -> None:
-        window = self.operator_window
-        if window is None:
-            return
-
-        quantities = {
-            sku: spin.value()
-            for sku, spin in self.quantity_inputs.items()
-        }
-        delivery = (
-            self.delivery_status_label.text()
-            .removeprefix("Delivery: ")
-        )
-        window.set_snapshot(
-            slots=self.slots,
-            pallet_length=self.length_input.value(),
-            pallet_width=self.width_input.value(),
-            delivery_text=delivery,
-            status_text=self.status_label.text(),
-            quantities=quantities,
-            completed_count=self.executor.completed_count(),
-            current_slot=self.executor.current_slot(),
         )
 
     # ========================================================
