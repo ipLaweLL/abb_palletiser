@@ -3,6 +3,7 @@ from typing import Dict, List
 
 from config.products import PRODUCTS
 from planner.frontier_lookahead import FrontierLookaheadPlanner
+from planner.beam_recovery import recover_layout
 from planner.models import PalletSlot, PlannerResult, StackCandidate
 
 
@@ -152,6 +153,27 @@ class NewPalletPlanner:
                 single_item_columns=False,
             )
             state = fallback.search(quantities=quantities)
+
+        # The greedy rollout is a heuristic, not an infeasibility proof.
+        # On failure, explore several alternative legal XY arrangements
+        # of the same columns before rejecting the complete order.
+        if state.unplaced_count() != 0:
+            recovered = recover_layout(
+                planner=FrontierLookaheadPlanner(
+                    pallet_length=effective_length,
+                    pallet_width=effective_width,
+                    max_height=max_height,
+                    gap_x=gap_x,
+                    gap_y=gap_y,
+                    edge_margin_x=edge_margin_x,
+                    edge_margin_y=edge_margin_y,
+                    single_item_columns=False,
+                ),
+                quantities=quantities,
+                beam_width=160,
+            )
+            if recovered is not None:
+                state = recovered
 
         self.last_selected_planner = (
             "Frontier Look"
