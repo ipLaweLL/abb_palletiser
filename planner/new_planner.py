@@ -108,11 +108,13 @@ class NewPalletPlanner:
                     ),
                 )
 
-        sparse_single_items = (
-            total_items <= 8
-            and len(active_skus) == 1
-        )
-
+        # Prefer a complete floor layer before making vertical columns.
+        # This applies to both single-SKU and mixed-SKU orders.
+        #
+        # First try one item per floor position. If the frontier search
+        # cannot fit the entire order that way, retry using the original
+        # legal vertical columns. The existing SKU execution order is
+        # preserved by FrontierLookaheadPlanner in either attempt.
         planner = FrontierLookaheadPlanner(
             pallet_length=effective_length,
             pallet_width=effective_width,
@@ -121,20 +123,14 @@ class NewPalletPlanner:
             gap_y=gap_y,
             edge_margin_x=edge_margin_x,
             edge_margin_y=edge_margin_y,
-            single_item_columns=sparse_single_items,
+            single_item_columns=True,
         )
 
         state = planner.search(
             quantities=quantities,
         )
 
-        # Sparse orders should prefer one item per floor position.
-        # If that cannot fit, fall back to normal vertical stacking
-        # rather than rejecting an otherwise feasible order.
-        if (
-            sparse_single_items
-            and state.unplaced_count() != 0
-        ):
+        if state.unplaced_count() != 0:
             planner = FrontierLookaheadPlanner(
                 pallet_length=effective_length,
                 pallet_width=effective_width,
