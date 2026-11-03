@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 from config.products import PRODUCTS
 from config.deliveries import DELIVERY_ORDERS
 from config.validation_cases import VALIDATION_ORDERS
+from config.visual_stress_cases import VISUAL_STRESS_CASES
 
 from planner.models import (
     PalletSlot,
@@ -284,9 +285,7 @@ class MainWindow(QMainWindow):
             None,
         )
 
-        for index, order in enumerate(
-            VALIDATION_ORDERS
-        ):
+        for order in VALIDATION_ORDERS:
             label = (
                 f"Test {order['line']:02d} | "
                 f"1L={order['1L']}  "
@@ -297,7 +296,26 @@ class MainWindow(QMainWindow):
 
             self.validation_combo.addItem(
                 label,
-                index,
+                dict(order, visual_label=f"Test {order['line']:02d}"),
+            )
+
+        # GUI-only stress inputs: do not change the 130-case
+        # automated validation suite or its reference order list.
+        self.validation_combo.insertSeparator(
+            self.validation_combo.count()
+        )
+
+        for order in VISUAL_STRESS_CASES:
+            label = (
+                f"{order['name']} | "
+                f"1L={order['1L']}  "
+                f"4L={order['4L']}  "
+                f"10L={order['10L']}  "
+                f"20L={order['20L']}"
+            )
+            self.validation_combo.addItem(
+                label,
+                dict(order, visual_label=order['name']),
             )
 
         self.validation_combo.currentIndexChanged.connect(
@@ -824,14 +842,10 @@ class MainWindow(QMainWindow):
         self
     ) -> None:
 
-        index = (
-            self.validation_combo.currentData()
-        )
+        order = self.validation_combo.currentData()
 
-        if index is None:
+        if order is None:
             return
-
-        order = VALIDATION_ORDERS[index]
 
         self.current_delivery = None
 
@@ -846,7 +860,7 @@ class MainWindow(QMainWindow):
             )
 
         self.delivery_status_label.setText(
-            f"Validation Test: {order['line']:02d}"
+            f"Visual Test: {order['visual_label']}"
         )
 
         self.status_label.setText(
