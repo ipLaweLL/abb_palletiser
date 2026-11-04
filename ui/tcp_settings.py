@@ -145,7 +145,10 @@ class TcpSettingsTab(QWidget):
                     ) from error
             port = self.robot_port.value()
         except ValueError as error:
-            QMessageBox.warning(self, "Invalid TCP/IP Settings", str(error))
+            self.status_label.setText(f"Invalid TCP/IP settings: {error}")
+            logger = getattr(self, "error_logger", None)
+            if logger is not None:
+                logger("TCP/IP Settings", str(error))
             return
 
         self.abb_client.host = robot_ip
@@ -158,6 +161,9 @@ class TcpSettingsTab(QWidget):
         self.settings.sync()
         if self.settings.status() != QSettings.NoError:
             self.status_label.setText("Warning: Could not persist settings.")
+            logger = getattr(self, "error_logger", None)
+            if logger is not None:
+                logger("TCP/IP Settings", "Could not persist TCP/IP settings to disk.")
             return
 
         self.status_label.setText(
