@@ -90,11 +90,6 @@ class MainWindow(QMainWindow):
         self.auto_sim_timer.setInterval(450)
         self.auto_sim_timer.timeout.connect(self._auto_sim_step)
 
-        # Camera animation only touches the Live Pallet viewer.
-        self.camera_timer = QTimer(self)
-        self.camera_timer.setInterval(150)
-        self.camera_timer.timeout.connect(self._rotate_live_camera)
-
         self._build_ui()
 
         self.load_selected_delivery()
@@ -757,15 +752,6 @@ class MainWindow(QMainWindow):
             self.toggle_simulate_all
         )
 
-        self.auto_rotate_button = QPushButton(
-            "Auto Rotate: ON"
-        )
-        self.auto_rotate_button.setCheckable(True)
-        self.auto_rotate_button.setChecked(True)
-        self.auto_rotate_button.clicked.connect(
-            self._toggle_auto_rotate
-        )
-
         self.simulate_button = (
             QPushButton(
                 "Place Next with ABB"
@@ -804,10 +790,6 @@ class MainWindow(QMainWindow):
         status_layout.addWidget(
             self.simulate_all_button
         )
-        status_layout.addWidget(
-            self.auto_rotate_button
-        )
-
         status_layout.addWidget(
             self.simulate_button
         )
@@ -1047,28 +1029,8 @@ class MainWindow(QMainWindow):
         self.simulate_all_button.setText("Pause Simulation")
         self.status_label.setText("Status: Auto simulation running")
         self.auto_sim_timer.start()
-        if self.auto_rotate_button.isChecked():
-            self.camera_timer.start()
-
-    def _toggle_auto_rotate(self) -> None:
-        enabled = self.auto_rotate_button.isChecked()
-        self.auto_rotate_button.setText(
-            "Auto Rotate: ON" if enabled else "Auto Rotate: OFF"
-        )
-        if enabled and self.auto_sim_timer.isActive():
-            self.camera_timer.start()
-        else:
-            self.camera_timer.stop()
-
-    def _rotate_live_camera(self) -> None:
-        if self.auto_sim_timer.isActive():
-            self.live_view.rotate_camera(1.5)
-        else:
-            self.camera_timer.stop()
-
     def _stop_auto_sim(self) -> None:
         self.auto_sim_timer.stop()
-        self.camera_timer.stop()
         self.simulate_all_button.setText("Simulate All")
         has_next = bool(self.slots) and not self.executor.is_complete()
         self.local_sim_button.setEnabled(has_next)
