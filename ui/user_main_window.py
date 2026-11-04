@@ -24,8 +24,6 @@ from PySide6.QtWidgets import (
 
 from config.products import PRODUCTS
 from config.deliveries import DELIVERY_ORDERS
-from config.validation_cases import VALIDATION_ORDERS
-from config.visual_stress_cases import VISUAL_STRESS_CASES
 
 from planner.models import (
     PalletSlot,
@@ -272,68 +270,6 @@ class UserMainWindow(QMainWindow):
             0,
             1,
             3
-        )
-
-        # ----------------------------------------------------
-        # VISUAL VALIDATION CASES
-        # ----------------------------------------------------
-
-        self.validation_combo = QComboBox()
-
-        self.validation_combo.addItem(
-            "Select validation case...",
-            None,
-        )
-
-        for order in VALIDATION_ORDERS:
-            label = (
-                f"Test {order['line']:02d} | "
-                f"1L={order['1L']}  "
-                f"4L={order['4L']}  "
-                f"10L={order['10L']}  "
-                f"20L={order['20L']}"
-            )
-
-            self.validation_combo.addItem(
-                label,
-                dict(order, visual_label=f"Test {order['line']:02d}"),
-            )
-
-        # GUI-only stress inputs: do not change the 130-case
-        # automated validation suite or its reference order list.
-        self.validation_combo.insertSeparator(
-            self.validation_combo.count()
-        )
-
-        for order in VISUAL_STRESS_CASES:
-            label = (
-                f"{order['name']} | "
-                f"1L={order['1L']}  "
-                f"4L={order['4L']}  "
-                f"10L={order['10L']}  "
-                f"20L={order['20L']}"
-            )
-            self.validation_combo.addItem(
-                label,
-                dict(order, visual_label=order['name']),
-            )
-
-        self.validation_combo.currentIndexChanged.connect(
-            self.load_validation_case
-        )
-
-        delivery_grid.addWidget(
-            QLabel("Visual Test Case"),
-            7,
-            0,
-        )
-
-        delivery_grid.addWidget(
-            self.validation_combo,
-            7,
-            1,
-            1,
-            3,
         )
 
         # ----------------------------------------------------
@@ -830,41 +766,6 @@ class UserMainWindow(QMainWindow):
             f"Delivery: "
             f"{order['delivery']} "
             f"(Row {order['line']})"
-        )
-
-        self._update_order_total()
-
-    # ========================================================
-    # LOAD VISUAL VALIDATION CASE
-    # ========================================================
-
-    def load_validation_case(
-        self
-    ) -> None:
-
-        order = self.validation_combo.currentData()
-
-        if order is None:
-            return
-
-        self.current_delivery = None
-
-        for sku in [
-            "1L",
-            "4L",
-            "10L",
-            "20L",
-        ]:
-            self.quantity_inputs[sku].setValue(
-                order.get(sku, 0)
-            )
-
-        self.delivery_status_label.setText(
-            f"Visual Test: {order['visual_label']}"
-        )
-
-        self.status_label.setText(
-            "Status: Validation case loaded"
         )
 
         self._update_order_total()
