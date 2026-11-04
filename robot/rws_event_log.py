@@ -109,7 +109,7 @@ class RwsEventWorker(QThread):
             urllib.request.HTTPDigestAuthHandler(password_mgr),
             urllib.request.HTTPBasicAuthHandler(password_mgr),
         )
-        url = self.base_url + "/rw/elog/0?lang=en"
+        url = self.base_url + "/rw/elog/0?lang=en&order=lifo"
         seen = set()
         last_failure = None
         connected = False
