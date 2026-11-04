@@ -7,11 +7,12 @@ from datetime import datetime
 
 from PySide6.QtCore import QThread, QTimer, Qt
 from PySide6.QtWidgets import (
-    QDockWidget, QHBoxLayout, QLabel, QPlainTextEdit, QPushButton,
-    QVBoxLayout, QWidget,
+    QDockWidget, QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit,
+    QPushButton, QVBoxLayout, QWidget,
 )
 
 from robot.abb_client import ABBClient
+from robot.rws_event_log import RwsEventWorker
 
 
 class PlaceWorker(QThread):
@@ -51,6 +52,7 @@ class AbbExecutionMixin:
         self._place_all_running = False
         self._place_all_stop_requested = False
         self._abb_uncertain = False
+        self._rws_worker = None
 
         self.error_dock = QDockWidget("Communication & Error Log", self)
         self.error_dock.setObjectName("abbErrorLogDock")
@@ -65,6 +67,33 @@ class AbbExecutionMixin:
             "Connection failures, ABB replies, and application errors appear here."
         )
         pane_layout.addWidget(self.error_log)
+
+        # Controller RWS is an independent HTTP service, NOT the TCP
+        # PLACE server port. Credentials are only kept for this session.
+        rws_row = QHBoxLayout()
+        self.rws_url_edit = QLineEdit(f"http://{self.abb.host}")
+        self.rws_url_edit.setPlaceholderText("http://ABB-controller:80")
+        self.rws_url_edit.setToolTip(
+            "ABB Robot Web Services base URL (not the TCP PLACE port). "
+            "RobotStudio Virtual Controllers can use a different HTTP address/port."
+        )
+        rws_row.addWidget(QLabel("ABB event log URL:"))
+        rws_row.addWidget(self.rws_url_edit, 3)
+
+        self.rws_username_edit = QLineEdit("Default User")
+        self.rws_username_edit.setPlaceholderText("RWS username")
+        rws_row.addWidget(self.rws_username_edit, 1)
+
+        self.rws_password_edit = QLineEdit()
+        self.rws_password_edit.setEchoMode(QLineEdit.Password)
+        self.rws_password_edit.setPlaceholderText("RWS password")
+        rws_row.addWidget(self.rws_password_edit, 1)
+
+        self.rws_connect_button = QPushButton("Connect ABB Events")
+        self.rws_connect_button.clicked.connect(self.toggle_rws_events)
+        rws_row.addWidget(self.rws_connect_button)
+        pane_layout.addLayout(rws_row)
+
         row = QHBoxLayout()
         show_help = QLabel("Log source: Python / TCP/IP / ABB / Planner")
         row.addWidget(show_help)
@@ -75,6 +104,83 @@ class AbbExecutionMixin:
         pane_layout.addLayout(row)
         self.error_dock.setWidget(pane)
         self.addDockWidget(Qt.BottomDockWidgetArea, self.error_dock)
+
+    def toggle_rws_events(self):
+        if self._rws_worker is not None:
+            self._rws_worker.stop()
+            self.rws_connect_button.setEnabled(False)
+            self.status_label.setText("Status: Disconnecting ABB event log")
+            return
+
+        url = self.rws_url_edit.text().strip()
+        username = self.rws_username_edit.text().strip()
+        if not url or not username:
+            self.log_error(
+                "ABB RWS",
+                "Enter an RWS URL and username before connecting."
+            )
+            return
+
+        worker = RwsEventWorker(
+            url, username, self.rws_password_edit.text(), self
+        )
+        self._rws_worker = worker
+        worker.event_received.connect(self._on_rws_event)
+        worker.connection_status.connect(self._on_rws_status)
+        worker.finished.connect(self._on_rws_finished)
+        self.rws_connect_button.setText("Disconnect ABB Events")
+        self.log_error(
+            "ABB RWS", f"Monitoring controller event log at {url}"
+        )
+        worker.start()
+
+    def _on_rws_event(self, message, is_error):
+        self.log_error("ABB Controller", message)
+        if is_error and self._place_all_running:
+            # Do not queue further placement commands after a controller
+            # event of severity ERROR. In-flight request still needs its ACK.
+            self._place_all_stop_requested = True
+            self._abb_uncertain = True
+            self.status_label.setText(
+                "Status: ABB controller error — Place All halted, inspect log"
+            )
+            self._set_abb_buttons()
+
+    def _on_rws_status(self, message):
+        self.log_error("ABB RWS", message)
+
+    def _on_rws_finished(self):
+        worker = self._rws_worker
+        self._rws_worker = None
+        if worker is not None:
+            worker.deleteLater()
+        self.rws_connect_button.setText("Connect ABB Events")
+        self.rws_connect_button.setEnabled(True)
+
+    def closeEvent(self, event):
+        worker = getattr(self, "_rws_worker", None)
+        if worker is not None:
+            worker.stop()
+            # RWS requests use a short network timeout. Drain before Qt
+            # destroys the QThread to avoid QThread destroyed-while-running.
+            if not worker.wait(6000):
+                event.ignore()
+                self.log_error(
+                    "ABB RWS",
+                    "Event monitor is shutting down; disconnect before closing."
+                )
+                return
+        # Never destroy an active ABB placement worker on window close.
+        abb_worker = getattr(self, "_abb_worker", None)
+        if abb_worker is not None and abb_worker.isRunning():
+            event.ignore()
+            self.log_error(
+                "Python",
+                "Cannot close while a PLACE command is in flight. "
+                "Wait for ABB acknowledgement or the TCP timeout."
+            )
+            return
+        super().closeEvent(event)
 
     def log_error(self, source, message, slot=None):
         stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
