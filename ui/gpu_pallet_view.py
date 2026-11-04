@@ -107,7 +107,10 @@ def _mouse_world_ray(view, pixel_x, pixel_y):
     y_ndc = 1.0 - 2.0 * pixel_y / height
 
     def point(ndc_z):
-        value = inverse * QVector4D(x_ndc, y_ndc, ndc_z, 1.0)
+        # PySide6's overloaded QMatrix4x4 * QVector4D operator can
+        # raise a binding SyntaxError on some Windows builds. Use the
+        # documented map(QVector4D) overload instead.
+        value = inverse.map(QVector4D(x_ndc, y_ndc, ndc_z, 1.0))
         if abs(value.w()) < 1e-9:
             return None
         return np.array([
@@ -260,7 +263,13 @@ class GpuPallet3DView(QWidget):
         )
 
     def _update_hover_readout(self, pixel_x: float, pixel_y: float) -> None:
-        ray = _mouse_world_ray(self.view, pixel_x, pixel_y)
+        try:
+            ray = _mouse_world_ray(self.view, pixel_x, pixel_y)
+        except Exception:
+            # Hover is informational: never flood stderr or interrupt
+            # pallet simulation if a graphics driver / Qt binding fails.
+            self._clear_hover_readout()
+            return
         if ray is None:
             self._clear_hover_readout()
             return
