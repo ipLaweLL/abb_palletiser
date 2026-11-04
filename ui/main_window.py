@@ -1114,6 +1114,7 @@ class MainWindow(AbbExecutionMixin, QMainWindow):
 
         self.update_status()
         self._refresh_views()
+        self._set_abb_buttons()
 
 
     # ========================================================
