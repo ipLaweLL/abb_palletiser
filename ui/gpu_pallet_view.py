@@ -79,7 +79,7 @@ class GpuPallet3DView(QWidget):
         layout.addWidget(self.heading)
 
         self.view = gl.GLViewWidget()
-        self.view.setBackgroundColor("#15202b")
+        self.view.setBackgroundColor("white")
         self.view.setCameraPosition(distance=2500, elevation=27, azimuth=45)
         layout.addWidget(self.view, 1)
 
