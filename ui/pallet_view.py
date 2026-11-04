@@ -44,6 +44,11 @@ class Pallet3DView(QWidget):
 
         self.show_only_done = False
 
+        # Persist the camera between data updates (also after manual drag).
+        self.axes = None
+        self.camera_elevation = 27.0
+        self.camera_azimuth = -58.0
+
         layout = QVBoxLayout(
             self
         )
@@ -121,6 +126,12 @@ class Pallet3DView(QWidget):
         self
     ) -> None:
 
+        # The active 3D axes contains any camera changes made by
+        # dragging the mouse. Save them before rebuilding the scene.
+        if self.axes is not None:
+            self.camera_elevation = float(self.axes.elev)
+            self.camera_azimuth = float(self.axes.azim)
+
         self.figure.clear()
 
         ax = (
@@ -131,6 +142,8 @@ class Pallet3DView(QWidget):
                 projection="3d"
             )
         )
+
+        self.axes = ax
 
         self.figure.patch.set_facecolor(
             "white"
@@ -294,10 +307,8 @@ class Pallet3DView(QWidget):
         # ----------------------------------------------------
 
         ax.view_init(
-
-            elev=27,
-
-            azim=-58
+            elev=self.camera_elevation,
+            azim=self.camera_azimuth,
         )
 
         self._draw_legend(
@@ -306,6 +317,20 @@ class Pallet3DView(QWidget):
 
         self.figure.tight_layout()
 
+        self.canvas.draw_idle()
+
+    def rotate_camera(self, delta_degrees: float = 1.5) -> None:
+        """Rotate the existing scene without rebuilding all item geometry."""
+        if self.axes is None:
+            return
+        self.camera_elevation = float(self.axes.elev)
+        self.camera_azimuth = (
+            float(self.axes.azim) + delta_degrees
+        ) % 360.0
+        self.axes.view_init(
+            elev=self.camera_elevation,
+            azim=self.camera_azimuth,
+        )
         self.canvas.draw_idle()
 
     # ========================================================
