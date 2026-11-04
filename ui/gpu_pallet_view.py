@@ -15,10 +15,10 @@ from planner.models import PalletSlot
 
 # Bright, opaque SKU colors for clear contrast on the white canvas.
 COLORS = {
-    "1L": (1.00, 0.13, 0.19, 1.0),  # vivid red
-    "4L": (1.00, 0.55, 0.00, 1.0),  # saturated orange
-    "10L": (0.08, 0.40, 1.00, 1.0),  # electric blue
-    "20L": (0.00, 0.77, 0.28, 1.0),  # vivid green
+    "1L": (0.86, 0.22, 0.22, 1.0),  # muted red
+    "4L": (0.90, 0.55, 0.10, 1.0),  # softer orange
+    "10L": (0.20, 0.42, 0.88, 1.0),  # calmer blue
+    "20L": (0.12, 0.62, 0.30, 1.0),  # balanced green
 }
 
 
@@ -107,9 +107,8 @@ class GpuPallet3DView(QWidget):
             vertexes=np.asarray(triangles, dtype=np.float32),
             color=color,
             smooth=False,
-            drawEdges=False,
-            # Unlit faces retain the specified vibrant color rather
-            # than being darkened by OpenGL's default shaded shader.
+            drawEdges=True,
+            edgeColor=(0.20, 0.20, 0.20, 0.55),
             shader=None,
             glOptions="translucent" if translucent else "opaque",
         )
@@ -135,11 +134,11 @@ class GpuPallet3DView(QWidget):
                 self.pallet_length / 2, self.pallet_width / 2, -40,
                 self.pallet_length, self.pallet_width, 80,
             ),
-            (0.65, 0.69, 0.73, 0.28),
+            (0.72, 0.74, 0.77, 0.35),
             translucent=True,
         )
         for slot in visible:
-            color = (1.0, 0.88, 0.0, 1.0) if slot.status == "ACTIVE" else COLORS[slot.sku]
+            color = (0.92, 0.78, 0.10, 1.0) if slot.status == "ACTIVE" else COLORS[slot.sku]
             if slot.sku in ("10L", "20L"):
                 triangles = _cylinder_triangles(
                     slot.x, slot.y, slot.z, slot.length / 2, slot.height,
