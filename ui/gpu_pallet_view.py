@@ -13,11 +13,12 @@ from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 from planner.models import PalletSlot
 
 
+# Bright, opaque SKU colors for clear contrast on the white canvas.
 COLORS = {
-    "1L": (0.95, 0.17, 0.17, 0.98),
-    "4L": (1.00, 0.59, 0.08, 0.98),
-    "10L": (0.16, 0.37, 0.97, 0.98),
-    "20L": (0.12, 0.64, 0.31, 0.98),
+    "1L": (1.00, 0.13, 0.19, 1.0),  # vivid red
+    "4L": (1.00, 0.55, 0.00, 1.0),  # saturated orange
+    "10L": (0.08, 0.40, 1.00, 1.0),  # electric blue
+    "20L": (0.00, 0.77, 0.28, 1.0),  # vivid green
 }
 
 
@@ -101,15 +102,16 @@ class GpuPallet3DView(QWidget):
         self.show_only_done = show_only_done
         self.redraw()
 
-    def _add_mesh(self, triangles, color):
+    def _add_mesh(self, triangles, color, translucent=False):
         mesh = gl.GLMeshItem(
             vertexes=np.asarray(triangles, dtype=np.float32),
             color=color,
             smooth=False,
-            drawEdges=True,
-            edgeColor=(0.10, 0.12, 0.15, 0.70),
-            shader="shaded",
-            glOptions="translucent",
+            drawEdges=False,
+            # Unlit faces retain the specified vibrant color rather
+            # than being darkened by OpenGL's default shaded shader.
+            shader=None,
+            glOptions="translucent" if translucent else "opaque",
         )
         self.view.addItem(mesh)
         self._items.append(mesh)
@@ -133,10 +135,11 @@ class GpuPallet3DView(QWidget):
                 self.pallet_length / 2, self.pallet_width / 2, -40,
                 self.pallet_length, self.pallet_width, 80,
             ),
-            (0.61, 0.46, 0.28, 0.27),
+            (0.65, 0.69, 0.73, 0.28),
+            translucent=True,
         )
         for slot in visible:
-            color = (1.0, 0.84, 0.02, 1.0) if slot.status == "ACTIVE" else COLORS[slot.sku]
+            color = (1.0, 0.88, 0.0, 1.0) if slot.status == "ACTIVE" else COLORS[slot.sku]
             if slot.sku in ("10L", "20L"):
                 triangles = _cylinder_triangles(
                     slot.x, slot.y, slot.z, slot.length / 2, slot.height,
