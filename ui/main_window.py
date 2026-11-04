@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QMessageBox,
     QFrame,
+    QTabWidget,
 )
 
 
@@ -46,6 +47,7 @@ from planner.free_space import (
     fitting_skus,
 )
 from ui.pallet_view import Pallet3DView
+from ui.tcp_settings import TcpSettingsTab
 from execution.pallet_executor import PalletExecutor
 
 
@@ -104,9 +106,11 @@ class MainWindow(QMainWindow):
 
         root = QWidget()
 
-        self.setCentralWidget(
-            root
-        )
+        self.tabs = QTabWidget()
+        self.tabs.addTab(root, "Pallet Planner")
+        self.tcp_settings_tab = TcpSettingsTab(self.abb, self.tabs)
+        self.tabs.addTab(self.tcp_settings_tab, "TCP/IP Settings")
+        self.setCentralWidget(self.tabs)
 
         main_layout = (
             QVBoxLayout(
