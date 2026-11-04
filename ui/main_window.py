@@ -409,7 +409,7 @@ class MainWindow(QMainWindow):
         )
 
         self.height_input.setValue(
-            1600
+            800
         )
 
         self.height_input.setSuffix(
