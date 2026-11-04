@@ -83,6 +83,7 @@ class UserMainWindow(AbbExecutionMixin, QMainWindow):
 
         self._build_ui()
         self.init_abb_execution()
+        self.tcp_settings_tab.error_logger = self.log_error
         self._set_abb_buttons()
 
         self.load_selected_delivery()
