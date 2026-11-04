@@ -44,6 +44,7 @@ from planner.free_space import (
 )
 from ui.pallet_view import Pallet3DView
 from ui.tcp_settings import TcpSettingsTab
+from ui.abb_execution import AbbExecutionMixin
 from execution.pallet_executor import PalletExecutor
 
 
@@ -51,7 +52,7 @@ from execution.pallet_executor import PalletExecutor
 # MAIN WINDOW
 # ============================================================
 
-class UserMainWindow(QMainWindow):
+class UserMainWindow(AbbExecutionMixin, QMainWindow):
 
     def __init__(
         self
@@ -81,6 +82,9 @@ class UserMainWindow(QMainWindow):
         self.current_delivery = None
 
         self._build_ui()
+        self.init_abb_execution()
+        self.tcp_settings_tab.error_logger = self.log_error
+        self._set_abb_buttons()
 
         self.load_selected_delivery()
 
@@ -94,6 +98,7 @@ class UserMainWindow(QMainWindow):
 
         root = QWidget()
 
+        # Preserve the existing planner screen as its own tab.
         self.tabs = QTabWidget()
         self.tabs.addTab(root, "Pallet Planner")
         self.tcp_settings_tab = TcpSettingsTab(self.abb, self.tabs)
@@ -674,6 +679,10 @@ class UserMainWindow(QMainWindow):
             self.simulate_place_local
         )
 
+        self.place_all_button = QPushButton("Place All with ABB")
+        self.place_all_button.setEnabled(False)
+        self.place_all_button.clicked.connect(self.toggle_place_all)
+
         self.simulate_button = (
             QPushButton(
                 "Place Next with ABB"
@@ -713,6 +722,7 @@ class UserMainWindow(QMainWindow):
         status_layout.addWidget(
             self.simulate_button
         )
+        status_layout.addWidget(self.place_all_button)
 
         main_layout.addWidget(
             status_frame
@@ -806,6 +816,10 @@ class UserMainWindow(QMainWindow):
 
     def generate_pallet(self) -> None:
 
+        if not self._guard_abb_operation():
+            return
+        self._clear_abb_uncertainty_on_reset()
+
         # Force Qt spinboxes to accept whatever is currently typed
         for spin in self.quantity_inputs.values():
             spin.interpretText()
@@ -821,11 +835,7 @@ class UserMainWindow(QMainWindow):
 
         if sum(quantities.values()) == 0:
 
-            QMessageBox.warning(
-                self,
-                "Empty Order",
-                "Enter at least one product quantity."
-            )
+            self.log_error("Planner", "Empty order: Enter at least one product quantity.")
 
             return
 
@@ -866,12 +876,9 @@ class UserMainWindow(QMainWindow):
             )
 
             self._refresh_views()
+            self._set_abb_buttons()
 
-            QMessageBox.warning(
-                self,
-                "Cannot Build Pallet",
-                result.error
-            )
+            self.log_error("Planner", f"Cannot build pallet: {result.error}")
 
             return
 
@@ -891,11 +898,19 @@ class UserMainWindow(QMainWindow):
         self._update_free_space()
         self.update_status()
         self._refresh_views()
+        self._set_abb_buttons()
 
     # ========================================================
     # LOCAL SIMULATION (NO ABB COMMUNICATION)
     # ========================================================
     def simulate_place_local(self) -> None:
+
+        if self._abb_worker is not None or self._place_all_running or self._abb_uncertain:
+            self.log_error(
+                "Python",
+                "Local simulation blocked while ABB command is active or unconfirmed.",
+            )
+            return
 
         current = self.executor.current_slot()
 
@@ -943,80 +958,6 @@ class UserMainWindow(QMainWindow):
     # ========================================================
     # MARK NEXT ITEM ACTIVE
     # ========================================================
-    def simulate_place(self) -> None:
-
-        current = self.executor.current_slot()
-
-        if current is None:
-            return
-
-        self.status_label.setText(
-            f"Status: Sending slot {current.id} to ABB..."
-        )
-
-        QApplication.processEvents()
-
-        try:
-            reply = self.executor.place_next()
-
-        except (OSError, socket.timeout) as exc:
-
-            self.status_label.setText(
-                "Status: ABB communication failed"
-            )
-
-            QMessageBox.critical(
-                self,
-                "ABB Communication Error",
-                (
-                    f"Could not complete slot {current.id}.\n\n"
-                    f"{exc}"
-                ),
-            )
-
-            return
-
-        if reply != "PLACED":
-
-            self.status_label.setText(
-                f"Status: ABB returned {reply or 'no reply'}"
-            )
-
-            QMessageBox.warning(
-                self,
-                "ABB Placement Not Confirmed",
-                (
-                    f"Slot {current.id} was not marked DONE.\n\n"
-                    f"ABB reply: {reply!r}"
-                ),
-            )
-
-            return
-
-        if self.executor.is_complete():
-
-            self.status_label.setText(
-                "Status: PALLET COMPLETE"
-            )
-
-            self.current_item_label.setText(
-                "Current Item: -"
-            )
-
-            self.simulate_button.setEnabled(
-                False
-            )
-
-        else:
-
-            self.status_label.setText(
-                "Status: ABB placement confirmed"
-            )
-
-        self.update_status()
-        self._refresh_views()
-
-
     # ========================================================
     # UPDATE FREE FLOOR SPACE
     # ========================================================
@@ -1216,6 +1157,10 @@ class UserMainWindow(QMainWindow):
 
     def reset_live(self) -> None:
 
+        if not self._guard_abb_operation():
+            return
+        self._clear_abb_uncertainty_on_reset()
+
         self.executor.reset()
 
         if self.slots:
@@ -1244,3 +1189,4 @@ class UserMainWindow(QMainWindow):
 
         self.update_status()
         self._refresh_views()
+        self._set_abb_buttons()
