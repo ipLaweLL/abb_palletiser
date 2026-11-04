@@ -7,7 +7,7 @@ from datetime import datetime
 
 from PySide6.QtCore import QThread, QTimer, Qt
 from PySide6.QtWidgets import (
-    QDockWidget, QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit,
+    QDockWidget, QHBoxLayout, QLabel, QPlainTextEdit,
     QPushButton, QVBoxLayout, QWidget,
 )
 
@@ -68,31 +68,14 @@ class AbbExecutionMixin:
         )
         pane_layout.addWidget(self.error_log)
 
-        # Controller RWS is an independent HTTP service, NOT the TCP
-        # PLACE server port. Credentials are only kept for this session.
-        rws_row = QHBoxLayout()
-        self.rws_url_edit = QLineEdit(f"http://{self.abb.host}")
-        self.rws_url_edit.setPlaceholderText("http://ABB-controller:80")
-        self.rws_url_edit.setToolTip(
-            "ABB Robot Web Services base URL (not the TCP PLACE port). "
-            "RobotStudio Virtual Controllers can use a different HTTP address/port."
-        )
-        rws_row.addWidget(QLabel("ABB event log URL:"))
-        rws_row.addWidget(self.rws_url_edit, 3)
-
-        self.rws_username_edit = QLineEdit("Default User")
-        self.rws_username_edit.setPlaceholderText("RWS username")
-        rws_row.addWidget(self.rws_username_edit, 1)
-
-        self.rws_password_edit = QLineEdit()
-        self.rws_password_edit.setEchoMode(QLineEdit.Password)
-        self.rws_password_edit.setPlaceholderText("RWS password")
-        rws_row.addWidget(self.rws_password_edit, 1)
-
-        self.rws_connect_button = QPushButton("Connect ABB Events")
+        # The event-monitor connection controls live in TCP/IP Settings.
+        # Keep the dock dedicated to diagnostic output.
+        tab = self.tcp_settings_tab
+        self.rws_url_edit = tab.rws_url_edit
+        self.rws_username_edit = tab.rws_username_edit
+        self.rws_password_edit = tab.rws_password_edit
+        self.rws_connect_button = tab.rws_connect_button
         self.rws_connect_button.clicked.connect(self.toggle_rws_events)
-        rws_row.addWidget(self.rws_connect_button)
-        pane_layout.addLayout(rws_row)
 
         row = QHBoxLayout()
         show_help = QLabel("Log source: Python / TCP/IP / ABB / Planner")
@@ -121,6 +104,8 @@ class AbbExecutionMixin:
             )
             return
 
+        # Save only connection URL and username, never the password.
+        self.tcp_settings_tab.save_rws_preferences()
         worker = RwsEventWorker(
             url, username, self.rws_password_edit.text(), self
         )
