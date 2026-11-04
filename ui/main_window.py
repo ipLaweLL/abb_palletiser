@@ -56,7 +56,8 @@ from execution.pallet_executor import PalletExecutor
 class MainWindow(QMainWindow):
 
     def __init__(
-        self
+        self,
+        view_class=Pallet3DView,
     ):
 
         super().__init__()
@@ -69,6 +70,8 @@ class MainWindow(QMainWindow):
             1650,
             950
         )
+
+        self.view_class = view_class
 
         self.planner = NewPalletPlanner()
 
@@ -650,7 +653,7 @@ class MainWindow(QMainWindow):
         )
 
         self.target_view = (
-            Pallet3DView(
+            self.view_class(
                 "Target Pallet"
             )
         )
@@ -673,7 +676,7 @@ class MainWindow(QMainWindow):
         )
 
         self.live_view = (
-            Pallet3DView(
+            self.view_class(
                 "Live Pallet"
             )
         )
