@@ -21,10 +21,13 @@ class ABBClient:
         host: str = ABB_HOST,
         port: int = ABB_PORT,
         timeout_s: float = ABB_TIMEOUT_S,
+        local_ip: str = "",
     ):
         self.host = host
         self.port = port
         self.timeout_s = timeout_s
+        # Empty means OS chooses the outbound source interface.
+        self.local_ip = local_ip
 
     def place(
         self,
@@ -46,6 +49,8 @@ class ABBClient:
             socket.SOCK_STREAM,
         ) as sock:
             sock.settimeout(self.timeout_s)
+            if self.local_ip:
+                sock.bind((self.local_ip, 0))
             sock.connect((self.host, self.port))
 
             print("ABB SEND:", message)
