@@ -103,6 +103,46 @@ class TcpSettingsTab(QWidget):
         note.setWordWrap(True)
         layout.addWidget(note)
 
+        # RWS is a separate HTTP service used to read the ABB event log.
+        # Only URL and username are persisted. The password stays in memory.
+        rws_group = QGroupBox("ABB Event Log (Robot Web Services)")
+        rws_form = QFormLayout(rws_group)
+
+        self.rws_url_edit = QLineEdit()
+        self.rws_url_edit.setText(str(
+            self.settings.value(
+                "rws/url", f"http://{self.abb_client.host}:80"
+            )
+        ))
+        self.rws_url_edit.setPlaceholderText("http://127.0.0.1:80")
+        self.rws_url_edit.setToolTip(
+            "Robot Web Services HTTP URL, not the TCP PLACE port."
+        )
+        rws_form.addRow("ABB event log URL:", self.rws_url_edit)
+
+        self.rws_username_edit = QLineEdit()
+        self.rws_username_edit.setText(str(
+            self.settings.value("rws/username", "Default User")
+        ))
+        rws_form.addRow("RWS username:", self.rws_username_edit)
+
+        self.rws_password_edit = QLineEdit()
+        self.rws_password_edit.setEchoMode(QLineEdit.Password)
+        self.rws_password_edit.setPlaceholderText("Enter RWS password")
+        rws_form.addRow("RWS password:", self.rws_password_edit)
+
+        self.rws_connect_button = QPushButton("Connect ABB Events")
+        rws_form.addRow("", self.rws_connect_button)
+        layout.addWidget(rws_group)
+
+        rws_note = QLabel(
+            "Connect to stream RobotStudio/controller events into the "
+            "Communication & Error Log. The URL and username can be "
+            "saved; the password is not saved to disk."
+        )
+        rws_note.setWordWrap(True)
+        layout.addWidget(rws_note)
+
         actions = QHBoxLayout()
         refresh = QPushButton("Detect PC IP")
         refresh.clicked.connect(self.refresh_detected_ip)
@@ -117,6 +157,23 @@ class TcpSettingsTab(QWidget):
         self.status_label = QLabel("Settings have not been changed.")
         layout.addWidget(self.status_label)
         layout.addStretch()
+
+    def save_rws_preferences(self):
+        """Persist non-secret RWS fields, including when Connect is clicked."""
+        self.settings.setValue(
+            "rws/url", self.rws_url_edit.text().strip()
+        )
+        self.settings.setValue(
+            "rws/username", self.rws_username_edit.text().strip()
+        )
+        self.settings.sync()
+        if self.settings.status() != QSettings.NoError:
+            logger = getattr(self, "error_logger", None)
+            if logger is not None:
+                logger(
+                    "TCP/IP Settings",
+                    "Could not persist ABB event-log URL and username.",
+                )
 
     def refresh_detected_ip(self):
         target = self.robot_ip.text().strip()
@@ -158,6 +215,10 @@ class TcpSettingsTab(QWidget):
         self.settings.setValue("tcp/abb_ip", robot_ip)
         self.settings.setValue("tcp/abb_port", port)
         self.settings.setValue("tcp/local_ip", local_ip)
+        self.settings.setValue("rws/url", self.rws_url_edit.text().strip())
+        self.settings.setValue(
+            "rws/username", self.rws_username_edit.text().strip()
+        )
         self.settings.sync()
         if self.settings.status() != QSettings.NoError:
             self.status_label.setText("Warning: Could not persist settings.")
