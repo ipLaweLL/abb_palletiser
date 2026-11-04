@@ -80,6 +80,12 @@ class TcpSettingsTab(QWidget):
         ))
         form.addRow("PC / application IP (optional):", self.local_ip)
 
+        # Apply saved settings when the application starts, not only
+        # after the user presses Save.
+        self.abb_client.host = self.robot_ip.text().strip()
+        self.abb_client.port = self.robot_port.value()
+        self.abb_client.local_ip = self.local_ip.text().strip()
+
         self.detected_ip_label = QLabel()
         form.addRow("Detected PC IP for ABB route:", self.detected_ip_label)
 
