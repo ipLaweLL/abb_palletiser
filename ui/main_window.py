@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
 
+from PySide6.QtCore import QTimer
+
 from PySide6.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -79,6 +81,11 @@ class MainWindow(QMainWindow):
         self.slots = []
 
         self.current_delivery = None
+
+        # Local-only sequence playback; never invokes ABB.
+        self.auto_sim_timer = QTimer(self)
+        self.auto_sim_timer.setInterval(450)
+        self.auto_sim_timer.timeout.connect(self._auto_sim_step)
 
         self._build_ui()
 
@@ -734,6 +741,14 @@ class MainWindow(QMainWindow):
             self.simulate_place_local
         )
 
+        self.simulate_all_button = QPushButton(
+            "Simulate All"
+        )
+        self.simulate_all_button.setEnabled(False)
+        self.simulate_all_button.clicked.connect(
+            self.toggle_simulate_all
+        )
+
         self.simulate_button = (
             QPushButton(
                 "Place Next with ABB"
@@ -768,6 +783,9 @@ class MainWindow(QMainWindow):
 
         status_layout.addWidget(
             self.local_sim_button
+        )
+        status_layout.addWidget(
+            self.simulate_all_button
         )
 
         status_layout.addWidget(
@@ -901,6 +919,8 @@ class MainWindow(QMainWindow):
 
     def generate_pallet(self) -> None:
 
+        self._stop_auto_sim()
+
         # Force Qt spinboxes to accept whatever is currently typed
         for spin in self.quantity_inputs.values():
             spin.interpretText()
@@ -942,6 +962,7 @@ class MainWindow(QMainWindow):
             self.slots = []
 
             self.local_sim_button.setEnabled(False)
+            self.simulate_all_button.setEnabled(False)
             self.simulate_button.setEnabled(False)
 
             self.current_item_label.setText(
@@ -977,6 +998,7 @@ class MainWindow(QMainWindow):
         )
 
         self.local_sim_button.setEnabled(True)
+        self.simulate_all_button.setEnabled(True)
         self.simulate_button.setEnabled(True)
 
         self.status_label.setText(
@@ -986,6 +1008,44 @@ class MainWindow(QMainWindow):
         self._update_free_space()
         self.update_status()
         self._refresh_views()
+
+    # ========================================================
+    # AUTOMATIC LOCAL SIMULATION (NEVER COMMUNICATES WITH ABB)
+    # ========================================================
+
+    def toggle_simulate_all(self) -> None:
+        if self.auto_sim_timer.isActive():
+            self._stop_auto_sim()
+            self.status_label.setText("Status: Simulation paused")
+            return
+
+        if not self.slots or self.executor.is_complete():
+            return
+
+        self.local_sim_button.setEnabled(False)
+        self.simulate_button.setEnabled(False)
+        self.simulate_all_button.setText("Pause Simulation")
+        self.status_label.setText("Status: Auto simulation running")
+        self.auto_sim_timer.start()
+
+    def _stop_auto_sim(self) -> None:
+        self.auto_sim_timer.stop()
+        self.simulate_all_button.setText("Simulate All")
+        has_next = bool(self.slots) and not self.executor.is_complete()
+        self.local_sim_button.setEnabled(has_next)
+        self.simulate_all_button.setEnabled(has_next)
+        self.simulate_button.setEnabled(has_next)
+
+    def _auto_sim_step(self) -> None:
+        if not self.slots or self.executor.is_complete():
+            self._stop_auto_sim()
+            return
+
+        # Reuse the same local placement path as Simulate Next.
+        self.simulate_place_local()
+
+        if self.executor.is_complete():
+            self._stop_auto_sim()
 
     # ========================================================
     # LOCAL SIMULATION (NO ABB COMMUNICATION)
@@ -1311,10 +1371,12 @@ class MainWindow(QMainWindow):
 
     def reset_live(self) -> None:
 
+        self._stop_auto_sim()
         self.executor.reset()
 
         if self.slots:
 
+            self.simulate_all_button.setEnabled(True)
             self.local_sim_button.setEnabled(
                 True
             )
@@ -1329,9 +1391,9 @@ class MainWindow(QMainWindow):
 
         else:
 
-            self.simulate_button.setEnabled(
-                False
-            )
+            self.local_sim_button.setEnabled(False)
+            self.simulate_all_button.setEnabled(False)
+            self.simulate_button.setEnabled(False)
 
             self.status_label.setText(
                 "Status: Waiting"
