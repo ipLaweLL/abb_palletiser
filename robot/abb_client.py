@@ -35,6 +35,7 @@ class ABBClient:
         x: float,
         y: float,
         z: float,
+        on_event=None,
     ) -> str:
         message = (
             f"PLACE;"
@@ -53,8 +54,10 @@ class ABBClient:
                 sock.bind((self.local_ip, 0))
             sock.connect((self.host, self.port))
 
-            print("ABB SEND:", message)
             sock.sendall(message.encode("ascii"))
+            print("ABB SEND:", message)
+            if on_event is not None:
+                on_event("ABB SEND", message)
 
             reply = sock.recv(1024).decode(
                 "ascii",
@@ -62,4 +65,6 @@ class ABBClient:
             ).strip()
 
             print("ABB REPLY:", reply)
+            if on_event is not None:
+                on_event("ABB REPLY", reply)
             return reply
