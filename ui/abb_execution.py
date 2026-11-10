@@ -5,7 +5,7 @@ updated from Qt's GUI thread after the worker finishes.
 """
 from datetime import datetime
 
-from PySide6.QtCore import QThread, QTimer, Qt
+from PySide6.QtCore import QThread, QTimer, Qt, Signal
 from PySide6.QtWidgets import (
     QDockWidget, QHBoxLayout, QLabel, QPlainTextEdit,
     QPushButton, QVBoxLayout, QWidget,
@@ -17,6 +17,8 @@ from robot.rws_event_log import RwsEventWorker
 
 class PlaceWorker(QThread):
     """Perform exactly one PLACE request, with no automatic retry."""
+
+    communication_event = Signal(str, str)
 
     def __init__(self, client, slot, parent=None):
         super().__init__(parent)
@@ -36,7 +38,8 @@ class PlaceWorker(QThread):
     def run(self):
         try:
             self.reply = self.client.place(
-                slot_id=self.slot_id, x=self.x, y=self.y, z=self.z
+                slot_id=self.slot_id, x=self.x, y=self.y, z=self.z,
+                on_event=self.communication_event.emit,
             )
         except OSError as exc:
             self.error = ("TCP/IP", f"{type(exc).__name__}: {exc}")
@@ -215,12 +218,17 @@ class AbbExecutionMixin:
             self._finish_place_all()
             return
         self._abb_worker = PlaceWorker(self.abb, slot, self)
+        self._abb_worker.communication_event.connect(self._on_abb_communication_event)
         self._abb_worker.finished.connect(self._on_abb_place_finished)
         self.status_label.setText(
             f"Status: Waiting for ABB confirmation of slot {slot.id}"
         )
         self._set_abb_buttons()
         self._abb_worker.start()
+
+    def _on_abb_communication_event(self, source, message):
+        """Append socket traffic on the GUI thread alongside RWS events."""
+        self.log_error(source, message)
 
     def simulate_place(self):
         """Existing 'Place Next with ABB' action, now non-blocking."""
