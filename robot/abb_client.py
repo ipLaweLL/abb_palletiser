@@ -1,7 +1,5 @@
 import socket
 
-from robot.protocol import build_place_message
-
 # ============================================================
 # ABB TCP CLIENT
 # ============================================================
@@ -58,6 +56,15 @@ class ABBClient:
             print("ABB SEND:", message)
             if on_event is not None:
                 on_event("ABB SEND", message)
+
+            # Connection establishment still has a timeout, but a physical
+            # pick/place cycle can take arbitrarily long. Wait for RAPID's
+            # completion acknowledgement without a receive deadline.
+            # The GUI worker is asynchronous; it updates the pallet only
+            # when the exact PLACED reply arrives.
+            sock.settimeout(None)
+            if on_event is not None:
+                on_event("ABB", "Waiting for PLACED acknowledgement (no placement timeout)")
 
             reply = sock.recv(1024).decode(
                 "ascii",
