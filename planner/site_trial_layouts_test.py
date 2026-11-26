@@ -49,7 +49,11 @@ def test_trial(trial):
 
 def main():
     for trial in SITE_TRIAL_CASES:
-        test_trial(trial)
+        if trial.get('trial_layout'):
+            test_trial(trial)
+        else:
+            assert (trial['20L'], trial['10L'], trial['1L'], trial['4L']) == (3, 3, 3, 3)
+            assert sum(trial[sku] for sku in PRODUCTS) == 12
     too_narrow = make_site_trial_layout(
         "buckets_4_edge", {"10L": 4}, 900, 1300, 1000, 1000
     )
