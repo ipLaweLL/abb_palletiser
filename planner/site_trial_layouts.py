@@ -11,8 +11,8 @@ SITE_TRIAL_CASES = [
      "trial_layout": "cartons_5_edge", "1L": 5, "4L": 0, "10L": 0, "20L": 0},
     {"name": "Site Trial 02 - 4 x 10L (one-side row)",
      "trial_layout": "buckets_4_edge", "1L": 0, "4L": 0, "10L": 4, "20L": 0},
-    {"name": "Site Trial 03 - 12 x 10L (3+3 bottom, 3+3 top)",
-     "trial_layout": "buckets_12_two_layers", "1L": 0, "4L": 0, "10L": 12, "20L": 0},
+    {"name": "Site Trial 03 - 12 x 1L (3+3 bottom, 3+3 top)",
+     "trial_layout": "cartons_12_two_layers", "1L": 12, "4L": 0, "10L": 0, "20L": 0},
 ]
 
 
@@ -25,15 +25,15 @@ def make_site_trial_layout(
 
     1L: 3+2 floor-only compact strip, because 5 cartons in a straight
         row cannot fit a 1300 mm pallet at 20 mm margins and gaps.
-    10L: four buckets in one floor-level row, or six per layer (3+3)
-         with a second layer directly above the first.
+    1L: twelve cartons, 3+3 per layer, with six on top of six.
+    10L: four buckets in one floor-level row.
     """
     if trial_layout == "cartons_5_edge":
         sku, rows, layers = "1L", (3, 2), 1
     elif trial_layout == "buckets_4_edge":
         sku, rows, layers = "10L", (4,), 1
-    elif trial_layout == "buckets_12_two_layers":
-        sku, rows, layers = "10L", (3, 3), 2
+    elif trial_layout == "cartons_12_two_layers":
+        sku, rows, layers = "1L", (3, 3), 2
     else:
         return PlannerResult(success=False, error="Unknown site trial layout.")
 
