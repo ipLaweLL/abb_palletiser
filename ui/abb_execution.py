@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 )
 
 from robot.abb_client import ABBClient
+from robot.relative_coordinates import relative_place_xyz
 from robot.rws_event_log import RwsEventWorker
 
 
@@ -20,7 +21,7 @@ class PlaceWorker(QThread):
 
     communication_event = Signal(str, str)
 
-    def __init__(self, client, slot, parent=None):
+    def __init__(self, client, slot, first_slot, parent=None):
         super().__init__(parent)
         # Snapshot the configured endpoint so tab edits cannot change
         # the destination midway through an in-flight command.
@@ -31,7 +32,9 @@ class PlaceWorker(QThread):
             local_ip=client.local_ip,
         )
         self.slot_id = slot.id
-        self.x, self.y, self.z = slot.x, slot.y, slot.z
+        # Workobject is taught at first planned target; subtract that
+        # fixed origin for every command (never the previous slot).
+        self.x, self.y, self.z = relative_place_xyz(slot, first_slot)
         self.reply = None
         self.error = None
 
@@ -217,7 +220,7 @@ class AbbExecutionMixin:
         if slot is None:
             self._finish_place_all()
             return
-        self._abb_worker = PlaceWorker(self.abb, slot, self)
+        self._abb_worker = PlaceWorker(self.abb, slot, self.slots[0], self)
         self._abb_worker.communication_event.connect(self._on_abb_communication_event)
         self._abb_worker.finished.connect(self._on_abb_place_finished)
         self.status_label.setText(
