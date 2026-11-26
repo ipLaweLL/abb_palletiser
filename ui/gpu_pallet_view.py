@@ -176,8 +176,8 @@ class GpuPallet3DView(QWidget):
         layout.addWidget(self.view, 1)
 
         self.coordinate_label = QLabel(
-            "Pallet origin: (0, 0, 0) mm | "
-            "Move over the pallet to inspect XYZ"
+            "Origin: black dot at (0,0,0) | "
+            "+X red, +Y green, +Z blue | Hover for XYZ"
         )
         self.coordinate_label.setToolTip(
             "Coordinates are pallet-local, in millimetres. "
@@ -186,7 +186,8 @@ class GpuPallet3DView(QWidget):
         layout.addWidget(self.coordinate_label)
 
         self.legend = QLabel(
-            "20L: green   10L: blue   1L: red   4L: orange   Next: yellow"
+            "Products: 20L green, 10L blue, 1L red, 4L orange, Next yellow | "
+            "Axes: X red, Y green, Z blue"
         )
         layout.addWidget(self.legend)
 
@@ -238,6 +239,29 @@ class GpuPallet3DView(QWidget):
             (0.72, 0.74, 0.77, 0.35),
             translucent=True,
         )
+        # Pallet-local reference frame. The black marker is the top
+        # corner (0, 0, 0); the colored axes point toward +X, +Y, +Z.
+        # These guides stay fixed in pallet coordinates while orbiting.
+        origin_marker = gl.GLScatterPlotItem(
+            pos=np.array([[0.0, 0.0, 2.0]], dtype=np.float32),
+            color=(0.05, 0.05, 0.05, 1.0), size=13.0, pxMode=True,
+        )
+        self.view.addItem(origin_marker)
+        self._items.append(origin_marker)
+        guide_length = min(240.0, self.pallet_length * 0.25,
+                           self.pallet_width * 0.25)
+        for axis, color in (
+            ((guide_length, 0.0, 0.0), (1.0, 0.13, 0.13, 1.0)),
+            ((0.0, guide_length, 0.0), (0.10, 0.67, 0.22, 1.0)),
+            ((0.0, 0.0, guide_length), (0.12, 0.38, 0.96, 1.0)),
+        ):
+            guide = gl.GLLinePlotItem(
+                pos=np.array([[0.0, 0.0, 2.0], axis], dtype=np.float32),
+                color=color, width=4.0, antialias=True, mode="lines",
+            )
+            self.view.addItem(guide)
+            self._items.append(guide)
+
         for slot in visible:
             color = (0.92, 0.78, 0.10, 1.0) if slot.status == "ACTIVE" else COLORS[slot.sku]
             if slot.sku in ("10L", "20L"):
