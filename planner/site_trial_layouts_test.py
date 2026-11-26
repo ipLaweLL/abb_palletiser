@@ -36,6 +36,13 @@ def test_trial(trial):
         assert sorted(sum(s.y == y for s in result.slots[:6])
                       for y in {s.y for s in result.slots[:6]}) == [3, 3]
         assert [s.z for s in result.slots] == [76.5] * 6 + [229.5] * 6
+    elif trial["trial_layout"] == "buckets_12_four_rows":
+        assert len(result.slots) == 12
+        assert {s.level for s in result.slots} == {1}
+        assert len({s.x for s in result.slots}) == 3
+        assert len({s.y for s in result.slots}) == 4
+        assert [sum(s.y == y for s in result.slots)
+                for y in sorted({s.y for s in result.slots})] == [3] * 4
     elif trial["trial_layout"] == "buckets_4_edge":
         assert len({slot.y for slot in result.slots}) == 1
         assert len({slot.x for slot in result.slots}) == 4
@@ -49,11 +56,7 @@ def test_trial(trial):
 
 def main():
     for trial in SITE_TRIAL_CASES:
-        if trial.get('trial_layout'):
-            test_trial(trial)
-        else:
-            assert (trial['20L'], trial['10L'], trial['1L'], trial['4L']) == (3, 3, 3, 3)
-            assert sum(trial[sku] for sku in PRODUCTS) == 12
+        test_trial(trial)
     too_narrow = make_site_trial_layout(
         "buckets_4_edge", {"10L": 4}, 900, 1300, 1000, 1000
     )
@@ -62,6 +65,10 @@ def main():
         "cartons_12_two_layers", {"1L": 12}, 1300, 1300, 300, 1000
     )
     assert not too_short.success
+    too_small = make_site_trial_layout(
+        "buckets_12_four_rows", {"10L": 12}, 1300, 1100, 1000, 1000
+    )
+    assert not too_small.success
     print("SITE TRIAL LAYOUT TESTS PASS")
 
 
