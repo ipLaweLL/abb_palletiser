@@ -3,6 +3,8 @@
 Run: python -m robot.relative_coordinates_test
 """
 from planner.site_trial_layouts import make_site_trial_layout
+from config.products import PRODUCTS
+from planner.models import PalletSlot
 from robot.relative_coordinates import relative_place_xyz
 from robot.protocol import build_place_message
 from execution.pallet_executor import PalletExecutor
@@ -40,7 +42,7 @@ def check(slots, expected):
     assert executor.is_complete()
     executor.reset()
     assert executor.place_next() == "PLACED"
-    assert client.commands[-1] == (slots[0].id, 0.0, 0.0, 0.0)
+    assert client.commands[-1] == (slots[0].id, *expected[0])
 
 
 def main():
@@ -54,7 +56,7 @@ def main():
     )
     check(
         trial("buckets_4_edge", {"1L": 0, "4L": 0, "10L": 4, "20L": 0}),
-        [(0, 0, 0), (287, 0, 0), (574, 0, 0), (861, 0, 0)],
+        [(0, 0, 157), (287, 0, 157), (574, 0, 157), (861, 0, 157)],
     )
     # New two-layer 1L trial: first layer remains at relative Z=0;
     # the top layer is exactly one carton height above it.
@@ -67,7 +69,37 @@ def main():
         for x in (0, 387, 774)
     ]
     check(stacked, expected_stacked)
-    print("PASS first-slot-relative XYZ + 12-carton two-layer trial")
+    # Fixed 1L Z datum remains unchanged when the first SKU is 20L.
+    # Each top-contact target is measured from the taught 1L contact.
+    # Verify canonical priority: 20L -> 10L -> 1L -> 4L.
+    priorities = ("20L", "10L", "1L", "4L")
+    mixed = []
+    for i, sku in enumerate(priorities, 1):
+        product = PRODUCTS[sku]
+        mixed.append(PalletSlot(
+            id=i, sku=sku, x=200.0 + (i-1)*200, y=200.0,
+            z=product.height/2, length=product.length, width=product.width,
+            height=product.height, rotation=0.0, stack_id=i, level=1,
+        ))
+    check(mixed, [(0, 0, 237), (200, 0, 157),
+                  (400, 0, 0), (600, 0, 67)])
+    # Upper level 20L: two full 390mm units, top-contact Z=780-153.
+    two_high = PalletSlot(
+        id=5, sku="20L", x=200, y=200, z=585,
+        length=306, width=306, height=390,
+        rotation=0.0, stack_id=1, level=2,
+    )
+    assert relative_place_xyz(two_high, mixed[0]) == (0.0, 0.0, 627.0)
+
+    # Reject geometry drift rather than silently sending a wrong TCP height.
+    two_high.height = 400
+    try:
+        relative_place_xyz(two_high, mixed[0])
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Mismatched SKU height was not rejected")
+    print("PASS 1L reference Z, 10L trial, stacked 1L, mixed SKUs, and reset")
 
 
 if __name__ == "__main__":
