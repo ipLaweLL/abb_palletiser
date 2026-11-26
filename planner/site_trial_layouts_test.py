@@ -20,7 +20,7 @@ def test_trial(trial):
     assert result.success, result.error
     assert len(result.slots) == sum(quantities.values())
     assert not validate_success(result, quantities, PALLET)
-    two_layers = trial["trial_layout"] == "cartons_12_two_layers"
+    two_layers = trial["trial_layout"] in ("cartons_12_two_layers", "buckets_12_two_layers")
     assert {slot.level for slot in result.slots} == ({1, 2} if two_layers else {1})
     assert all(slot.status == "PENDING" for slot in result.slots)
     assert all(slot.z == (slot.level - 0.5) * PRODUCTS[slot.sku].height
@@ -35,7 +35,8 @@ def test_trial(trial):
         assert [s.stack_id for s in result.slots] == list(range(1, 7)) * 2
         assert sorted(sum(s.y == y for s in result.slots[:6])
                       for y in {s.y for s in result.slots[:6]}) == [3, 3]
-        assert [s.z for s in result.slots] == [76.5] * 6 + [229.5] * 6
+        height = PRODUCTS[result.slots[0].sku].height
+        assert [s.z for s in result.slots] == [height / 2] * 6 + [1.5 * height] * 6
     elif trial["trial_layout"] == "buckets_12_four_rows":
         assert len(result.slots) == 12
         assert {s.level for s in result.slots} == {1}
@@ -69,6 +70,10 @@ def main():
         "buckets_12_four_rows", {"10L": 12}, 1300, 1100, 1000, 1000
     )
     assert not too_small.success
+    too_low_for_stacking = make_site_trial_layout(
+        "buckets_12_two_layers", {"10L": 12}, 1300, 1300, 600, 1000
+    )
+    assert not too_low_for_stacking.success
     print("SITE TRIAL LAYOUT TESTS PASS")
 
 
