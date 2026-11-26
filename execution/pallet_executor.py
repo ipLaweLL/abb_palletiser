@@ -54,6 +54,7 @@ class PalletExecutor:
             x=rel_x,
             y=rel_y,
             z=rel_z,
+            rotation=slot.rotation,
         )
 
         if reply != PLACED_RESPONSE:
