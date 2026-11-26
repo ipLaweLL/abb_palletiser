@@ -29,6 +29,7 @@ from config.products import PRODUCTS
 from config.deliveries import DELIVERY_ORDERS
 from config.validation_cases import VALIDATION_ORDERS
 from config.visual_stress_cases import VISUAL_STRESS_CASES
+from planner.site_trial_layouts import SITE_TRIAL_CASES, make_site_trial_layout
 
 from planner.models import (
     PalletSlot,
@@ -334,6 +335,12 @@ class MainWindow(AbbExecutionMixin, QMainWindow):
             self.validation_combo.addItem(
                 label,
                 dict(order, visual_label=order['name']),
+            )
+
+        self.validation_combo.insertSeparator(self.validation_combo.count())
+        for trial in SITE_TRIAL_CASES:
+            self.validation_combo.addItem(
+                trial['name'], dict(trial, visual_label=trial['name'])
             )
 
         self.validation_combo.currentIndexChanged.connect(
@@ -959,8 +966,28 @@ class MainWindow(AbbExecutionMixin, QMainWindow):
 
             return
 
-        result = self.planner.generate(
-            quantities=quantities,
+        selected_trial = self.validation_combo.currentData()
+        if (self.current_delivery is None
+                and isinstance(selected_trial, dict)
+                and selected_trial.get('trial_layout')
+                and all(quantities.get(sku, 0) == selected_trial.get(sku, 0)
+                        for sku in ('1L', '4L', '10L', '20L'))):
+            result = make_site_trial_layout(
+                trial_layout=selected_trial['trial_layout'],
+                quantities=quantities,
+                pallet_length=self.length_input.value(),
+                pallet_width=self.width_input.value(),
+                max_height=self.height_input.value(),
+                max_weight=self.weight_input.value(),
+                overhang=self.overhang_input.value(),
+                gap_x=self.gap_x_input.value(),
+                gap_y=self.gap_y_input.value(),
+                edge_margin_x=self.edge_margin_input.value(),
+                edge_margin_y=self.edge_margin_input.value(),
+            )
+        else:
+            result = self.planner.generate(
+                quantities=quantities,
             pallet_length=self.length_input.value(),
             pallet_width=self.width_input.value(),
             max_height=self.height_input.value(),
