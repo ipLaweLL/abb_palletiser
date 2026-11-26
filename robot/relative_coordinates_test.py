@@ -68,6 +68,20 @@ def main():
     ]
     check(rows_of_3, expected_buckets)
 
+    # Two layers of six 10L buckets: 3+3 bottom, then 3+3 on top.
+    # Contact Z includes the -5mm 10L correction on BOTH layers.
+    stacked_buckets = trial("buckets_12_two_layers",
+                            {"1L": 0, "4L": 0, "10L": 12, "20L": 0})
+    expected_stacked_buckets = [
+        (x, y, z)
+        for z in (152, 462)
+        for y in (0, 287)
+        for x in (0, 287, 574)
+    ]
+    check(stacked_buckets, expected_stacked_buckets)
+    assert [s.level for s in stacked_buckets] == [1] * 6 + [2] * 6
+    assert [s.stack_id for s in stacked_buckets] == list(range(1, 7)) * 2
+
     # New two-layer 1L trial: first layer remains at relative Z=0;
     # the top layer is exactly one carton height above it.
     stacked = trial("cartons_12_two_layers",
@@ -109,7 +123,7 @@ def main():
         pass
     else:
         raise AssertionError("Mismatched SKU height was not rejected")
-    print("PASS 1L Z datum, 10L -5mm, 12-bucket layout, stacked 1L, mixed SKUs, and reset")
+    print("PASS 1L Z datum, 10L -5mm, both 12-bucket layouts, stacked 1L, mixed SKUs, and reset")
 
 
 if __name__ == "__main__":
