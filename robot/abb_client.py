@@ -1,5 +1,7 @@
 import socket
 
+from robot.protocol import build_place_message
+
 # ============================================================
 # ABB TCP CLIENT
 # ============================================================
@@ -11,7 +13,7 @@ ABB_TIMEOUT_S = 60.0
 
 class ABBClient:
     """Small adapter for the RAPID protocol:
-    PLACE;<slot_id>;<x>;<y>;<z>  ->  PLACED
+    PLACE;<slot_id>;<x>;<y>;<z>;<rotation_deg>  ->  PLACED
     """
 
     def __init__(
@@ -33,15 +35,10 @@ class ABBClient:
         x: float,
         y: float,
         z: float,
+        rotation: float,
         on_event=None,
     ) -> str:
-        message = (
-            f"PLACE;"
-            f"{int(slot_id)};"
-            f"{x:.3f};"
-            f"{y:.3f};"
-            f"{z:.3f}"
-        )
+        message = build_place_message(slot_id, x, y, z, rotation)
 
         with socket.socket(
             socket.AF_INET,
