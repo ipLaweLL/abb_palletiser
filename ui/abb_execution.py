@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 )
 
 from robot.abb_client import ABBClient
+from robot.placement_coordinates import top_contact_xyz
 from robot.rws_event_log import RwsEventWorker
 
 
@@ -31,7 +32,8 @@ class PlaceWorker(QThread):
             local_ip=client.local_ip,
         )
         self.slot_id = slot.id
-        self.x, self.y, self.z = slot.x, slot.y, slot.z
+        # ABB targets suction contact; planner slots remain product centres.
+        self.x, self.y, self.z = top_contact_xyz(slot)
         self.reply = None
         self.error = None
 
