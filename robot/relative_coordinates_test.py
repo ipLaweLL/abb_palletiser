@@ -56,8 +56,18 @@ def main():
     )
     check(
         trial("buckets_4_edge", {"1L": 0, "4L": 0, "10L": 4, "20L": 0}),
-        [(0, 0, 157), (287, 0, 157), (574, 0, 157), (861, 0, 157)],
+        [(0, 0, 152), (287, 0, 152), (574, 0, 152), (861, 0, 152)],
     )
+    # Four rows of three 10L buckets: all first-layer ABB Z=152mm.
+    rows_of_3 = trial("buckets_12_four_rows",
+                      {"1L": 0, "4L": 0, "10L": 12, "20L": 0})
+    expected_buckets = [
+        (x, y, 152)
+        for y in (0, 287, 574, 861)
+        for x in (0, 287, 574)
+    ]
+    check(rows_of_3, expected_buckets)
+
     # New two-layer 1L trial: first layer remains at relative Z=0;
     # the top layer is exactly one carton height above it.
     stacked = trial("cartons_12_two_layers",
@@ -81,7 +91,7 @@ def main():
             z=product.height/2, length=product.length, width=product.width,
             height=product.height, rotation=0.0, stack_id=i, level=1,
         ))
-    check(mixed, [(0, 0, 237), (200, 0, 157),
+    check(mixed, [(0, 0, 237), (200, 0, 152),
                   (400, 0, 0), (600, 0, 67)])
     # Upper level 20L: two full 390mm units, top-contact Z=780-153.
     two_high = PalletSlot(
@@ -99,7 +109,7 @@ def main():
         pass
     else:
         raise AssertionError("Mismatched SKU height was not rejected")
-    print("PASS 1L reference Z, 10L trial, stacked 1L, mixed SKUs, and reset")
+    print("PASS 1L Z datum, 10L -5mm, 12-bucket layout, stacked 1L, mixed SKUs, and reset")
 
 
 if __name__ == "__main__":
