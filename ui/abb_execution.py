@@ -35,7 +35,6 @@ class PlaceWorker(QThread):
         # Workobject is taught at first planned target; subtract that
         # fixed origin for every command (never the previous slot).
         self.x, self.y, self.z = relative_place_xyz(slot, first_slot)
-        self.rotation = slot.rotation  # absolute planned orientation in pallet frame
         self.reply = None
         self.error = None
 
@@ -43,7 +42,6 @@ class PlaceWorker(QThread):
         try:
             self.reply = self.client.place(
                 slot_id=self.slot_id, x=self.x, y=self.y, z=self.z,
-                rotation=self.rotation,
                 on_event=self.communication_event.emit,
             )
         except OSError as exc:
