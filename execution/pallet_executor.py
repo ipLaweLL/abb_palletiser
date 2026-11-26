@@ -3,6 +3,7 @@ from typing import List, Optional
 from planner.models import PalletSlot
 from robot.abb_client import ABBClient
 from robot.protocol import PLACED_RESPONSE
+from robot.relative_coordinates import relative_place_xyz
 
 
 class PalletExecutor:
@@ -47,11 +48,12 @@ class PalletExecutor:
         if slot is None:
             return "COMPLETE"
 
+        rel_x, rel_y, rel_z = relative_place_xyz(slot, self.slots[0])
         reply = self.abb.place(
             slot_id=slot.id,
-            x=slot.x,
-            y=slot.y,
-            z=slot.z,
+            x=rel_x,
+            y=rel_y,
+            z=rel_z,
         )
 
         if reply != PLACED_RESPONSE:
