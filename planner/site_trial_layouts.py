@@ -13,6 +13,10 @@ SITE_TRIAL_CASES = [
      "trial_layout": "buckets_4_edge", "1L": 0, "4L": 0, "10L": 4, "20L": 0},
     {"name": "Site Trial 03 - 12 x 1L (3+3 bottom, 3+3 top)",
      "trial_layout": "cartons_12_two_layers", "1L": 12, "4L": 0, "10L": 0, "20L": 0},
+    # No trial_layout: pass through the normal mixed-SKU planner, preserving
+    # its 20L -> 10L -> 1L -> 4L execution priority and stacking rules.
+    {"name": "Site Trial 04 - Mixed (3 each: 20L, 10L, 1L, 4L)",
+     "1L": 3, "4L": 3, "10L": 3, "20L": 3},
 ]
 
 
