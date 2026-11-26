@@ -20,12 +20,23 @@ def test_trial(trial):
     assert result.success, result.error
     assert len(result.slots) == sum(quantities.values())
     assert not validate_success(result, quantities, PALLET)
-    assert all(slot.level == 1 for slot in result.slots)
+    two_layers = trial["trial_layout"] == "buckets_12_two_layers"
+    assert {slot.level for slot in result.slots} == ({1, 2} if two_layers else {1})
     assert all(slot.status == "PENDING" for slot in result.slots)
-    assert all(slot.z == PRODUCTS[slot.sku].height / 2 for slot in result.slots)
+    assert all(slot.z == (slot.level - 0.5) * PRODUCTS[slot.sku].height
+               for slot in result.slots)
     assert all(slot.x >= 0 and slot.y >= 0 for slot in result.slots)
 
-    if trial["trial_layout"] == "buckets_4_edge":
+    if two_layers:
+        assert len(result.slots) == 12
+        assert [s.level for s in result.slots] == [1] * 6 + [2] * 6
+        assert len({(s.x, s.y) for s in result.slots}) == 6
+        assert len({s.stack_id for s in result.slots}) == 6
+        assert [s.stack_id for s in result.slots] == list(range(1, 7)) * 2
+        assert sorted(sum(s.y == y for s in result.slots[:6])
+                      for y in {s.y for s in result.slots[:6]}) == [3, 3]
+        assert [s.z for s in result.slots] == [155.0] * 6 + [465.0] * 6
+    elif trial["trial_layout"] == "buckets_4_edge":
         assert len({slot.y for slot in result.slots}) == 1
         assert len({slot.x for slot in result.slots}) == 4
     else:
@@ -43,6 +54,10 @@ def main():
         "buckets_4_edge", {"10L": 4}, 900, 1300, 1000, 1000
     )
     assert not too_narrow.success
+    too_short = make_site_trial_layout(
+        "buckets_12_two_layers", {"10L": 12}, 1300, 1300, 600, 1000
+    )
+    assert not too_short.success
     print("SITE TRIAL LAYOUT TESTS PASS")
 
 
