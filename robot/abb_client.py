@@ -13,7 +13,7 @@ ABB_TIMEOUT_S = 60.0
 
 class ABBClient:
     """Small adapter for the RAPID protocol:
-    PLACE;<slot_id>;<x>;<y>;<z>;<rotation_deg>  ->  PLACED
+    PLACE;<slot_id>;<x>;<y>;<z>  ->  PLACED
     """
 
     def __init__(
@@ -35,10 +35,9 @@ class ABBClient:
         x: float,
         y: float,
         z: float,
-        rotation: float,
         on_event=None,
     ) -> str:
-        message = build_place_message(slot_id, x, y, z, rotation)
+        message = build_place_message(slot_id, x, y, z)
 
         with socket.socket(
             socket.AF_INET,
