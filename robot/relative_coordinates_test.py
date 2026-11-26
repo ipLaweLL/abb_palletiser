@@ -12,8 +12,8 @@ class FakeABB:
     def __init__(self):
         self.commands = []
 
-    def place(self, slot_id, x, y, z, rotation):
-        self.commands.append((slot_id, x, y, z, rotation))
+    def place(self, slot_id, x, y, z):
+        self.commands.append((slot_id, x, y, z))
         return "PLACED"
 
 
@@ -34,18 +34,18 @@ def check(slots, expected):
     for _ in slots:
         assert executor.place_next() == "PLACED"
     assert client.commands == [
-        (slots[i].id, *coordinates, slots[i].rotation)
+        (slots[i].id, *coordinates)
         for i, coordinates in enumerate(expected)
     ]
     assert executor.is_complete()
     executor.reset()
     assert executor.place_next() == "PLACED"
-    assert client.commands[-1] == (slots[0].id, 0.0, 0.0, 0.0, slots[0].rotation)
+    assert client.commands[-1] == (slots[0].id, 0.0, 0.0, 0.0)
 
 
 def main():
-    assert build_place_message(27, 608, 1139, 230, 90) == (
-        'PLACE;27;608.000;1139.000;230.000;90.000'
+    assert build_place_message(27, 608, 1139, 230) == (
+        'PLACE;27;608.000;1139.000;230.000'
     )
     check(
         trial("cartons_5_edge", {"1L": 5, "4L": 0, "10L": 0, "20L": 0}),
@@ -67,8 +67,7 @@ def main():
         for x in (0, 387, 774)
     ]
     check(stacked, expected_stacked)
-    assert all(s.rotation == 0.0 for s in stacked)
-    print("PASS first-slot-relative XYZ + R + 12-carton two-layer trial")
+    print("PASS first-slot-relative XYZ + 12-carton two-layer trial")
 
 
 if __name__ == "__main__":
