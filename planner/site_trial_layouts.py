@@ -13,12 +13,8 @@ SITE_TRIAL_CASES = [
      "trial_layout": "buckets_4_edge", "1L": 0, "4L": 0, "10L": 4, "20L": 0},
     {"name": "Site Trial 03 - 12 x 1L (3+3 bottom, 3+3 top)",
      "trial_layout": "cartons_12_two_layers", "1L": 12, "4L": 0, "10L": 0, "20L": 0},
-    {"name": "Site Trial 04 - Mixed 3+3+3+3 (20L,10L,1L,4L)",
-     "trial_layout": None, "1L": 3, "4L": 3, "10L": 3, "20L": 3},
-    # No trial_layout: pass through the normal mixed-SKU planner, preserving
-    # its 20L -> 10L -> 1L -> 4L execution priority and stacking rules.
-    {"name": "Site Trial 04 - Mixed (3 each: 20L, 10L, 1L, 4L)",
-     "1L": 3, "4L": 3, "10L": 3, "20L": 3},
+    {"name": "Site Trial 04 - 12 x 10L (3+3+3+3 single layer)",
+     "trial_layout": "buckets_12_four_rows", "1L": 0, "4L": 0, "10L": 12, "20L": 0},
 ]
 
 
@@ -32,7 +28,8 @@ def make_site_trial_layout(
     1L: 3+2 floor-only compact strip, because 5 cartons in a straight
         row cannot fit a 1300 mm pallet at 20 mm margins and gaps.
     1L: twelve cartons, 3+3 per layer, with six on top of six.
-    10L: four buckets in one floor-level row.
+    10L: four buckets in one floor-level row, or twelve buckets
+         in four rows of three on the first layer.
     """
     if trial_layout == "cartons_5_edge":
         sku, rows, layers = "1L", (3, 2), 1
@@ -40,6 +37,8 @@ def make_site_trial_layout(
         sku, rows, layers = "10L", (4,), 1
     elif trial_layout == "cartons_12_two_layers":
         sku, rows, layers = "1L", (3, 3), 2
+    elif trial_layout == "buckets_12_four_rows":
+        sku, rows, layers = "10L", (3, 3, 3, 3), 1
     else:
         return PlannerResult(success=False, error="Unknown site trial layout.")
 
