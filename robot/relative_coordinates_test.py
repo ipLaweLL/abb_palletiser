@@ -56,19 +56,19 @@ def main():
         trial("buckets_4_edge", {"1L": 0, "4L": 0, "10L": 4, "20L": 0}),
         [(0, 0, 0), (287, 0, 0), (574, 0, 0), (861, 0, 0)],
     )
-    # New two-layer 10L trial: first layer remains at relative Z=0;
-    # the top layer is exactly one bucket height above it.
-    stacked = trial("buckets_12_two_layers",
-                    {"1L": 0, "4L": 0, "10L": 12, "20L": 0})
+    # New two-layer 1L trial: first layer remains at relative Z=0;
+    # the top layer is exactly one carton height above it.
+    stacked = trial("cartons_12_two_layers",
+                    {"1L": 12, "4L": 0, "10L": 0, "20L": 0})
     expected_stacked = [
         (x, y, z)
-        for z in (0, 310)
-        for y in (0, 287)
-        for x in (0, 287, 574)
+        for z in (0, 153)
+        for y in (0, 267)
+        for x in (0, 387, 774)
     ]
     check(stacked, expected_stacked)
     assert all(s.rotation == 0.0 for s in stacked)
-    print("PASS first-slot-relative XYZ + R + 12-bucket two-layer trial")
+    print("PASS first-slot-relative XYZ + R + 12-carton two-layer trial")
 
 
 if __name__ == "__main__":
