@@ -13,6 +13,10 @@ from config.products import PRODUCTS
 REFERENCE_SKU = "1L"
 REFERENCE_CONTACT_HEIGHT_MM = PRODUCTS[REFERENCE_SKU].height
 
+# Temporary commissioning correction: 10L buckets were releasing high.
+# Applied once to the outgoing ABB target only; never to stacking geometry.
+SKU_CONTACT_Z_CORRECTION_MM = {"10L": -5.0}
+
 
 def relative_place_xyz(slot, first_slot):
     """Return ABB XYZ in mm for the fixed taught 1L contact-height reference."""
@@ -30,6 +34,7 @@ def relative_place_xyz(slot, first_slot):
         slot.x - first_slot.x,
         slot.y - first_slot.y,
         # Planner Z is at product centre; vacuum contact is at its top.
-        slot.z + slot.height / 2.0 - REFERENCE_CONTACT_HEIGHT_MM,
+        slot.z + slot.height / 2.0 - REFERENCE_CONTACT_HEIGHT_MM
+        + SKU_CONTACT_Z_CORRECTION_MM.get(slot.sku, 0.0),
     )
     return tuple(0.0 if abs(value) < 0.0005 else value for value in xyz)
